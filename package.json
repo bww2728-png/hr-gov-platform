@@ -1,0 +1,17 @@
+{
+  "name": "hr-governance-platform",
+  "version": "1.0.0",
+  "private": true,
+  "description": "HR Governance & Institutional Transformation Platform - 8 Engines + RBAC + 42 Maturity Dimensions + 52-Week Roadmap",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "db:generate": "npm --prefix server run db:generate",
+    "db:push": "npm --prefix server run db:push",
+    "db:seed": "npm --prefix server run db:seed",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "build": "npm --prefix client run build",
+    "start": "npm --prefix server run start",
+    "smoke": "npm --prefix server run smoke"
+  }
+}

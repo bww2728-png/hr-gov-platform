@@ -1,0 +1,34 @@
+# Dependencies & builds
+node_modules/
+dist/
+build/
+
+# Local data & secrets
+.env
+.env.local
+server/.pgdata/
+*.log
+*.pid
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Legacy files (overwritten by new architecture)
+server/src/services/
+server/src/routes/pos.routes.js
+server/src/routes/users.routes.js
+server/scripts/debug-user.js
+server/scripts/fix-routes.js
+client/src/components/CheckInModal.jsx
+client/src/components/CheckOutModal.jsx
+client/src/components/SessionCard.jsx
+client/src/pages/PosMap.jsx
+client/src/pages/admin/
+client/src/pages/analytics/
+client/src/hooks/useSocket.js
+
+# Verdent internal
+.verdent/

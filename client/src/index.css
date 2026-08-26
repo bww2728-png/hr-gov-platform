@@ -1,0 +1,50 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html, body, #root {
+    @apply h-full bg-ink-50 text-ink-900 antialiased;
+  }
+  body {
+    font-family: 'Tajawal', 'Inter', system-ui, sans-serif;
+  }
+  html[dir='ltr'] body { font-family: 'Inter', system-ui, sans-serif; }
+  table { @apply w-full text-sm; }
+  thead th { @apply bg-ink-100 text-ink-700 font-medium px-3 py-2 text-start; }
+  tbody td { @apply px-3 py-2 border-t border-ink-100; }
+  tbody tr:hover { @apply bg-ink-50/50; }
+}
+
+@layer components {
+  .btn { @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all border; }
+  .btn-primary { @apply btn bg-primary-600 text-white border-primary-600 hover:bg-primary-700; }
+  .btn-secondary { @apply btn bg-white text-ink-700 border-ink-300 hover:bg-ink-50; }
+  .btn-danger { @apply btn bg-danger-500 text-white border-danger-500 hover:bg-danger-600; }
+  .btn-ghost { @apply btn bg-transparent text-ink-700 border-transparent hover:bg-ink-100; }
+  .input, .select, .textarea {
+    @apply w-full px-3 py-2 bg-white border border-ink-300 rounded-lg text-sm
+           focus:outline-none focus:ring-2 focus:ring-primary-400 focus:border-primary-400 transition;
+  }
+  .label { @apply block text-sm font-medium text-ink-700 mb-1.5; }
+  .card { @apply bg-white rounded-xl shadow-card border border-ink-100; }
+  .card-padded { @apply card p-5; }
+  .badge { @apply inline-flex items-center gap-1 px-2 py-0.5 text-xs rounded-md font-medium; }
+  .badge-primary { @apply badge bg-primary-50 text-primary-700; }
+  .badge-success { @apply badge bg-green-50 text-success-600; }
+  .badge-warn { @apply badge bg-amber-50 text-warn-600; }
+  .badge-danger { @apply badge bg-red-50 text-danger-600; }
+  .badge-ink { @apply badge bg-ink-100 text-ink-700; }
+  .h1 { @apply text-2xl font-bold text-ink-900; }
+  .h2 { @apply text-xl font-semibold text-ink-900; }
+  .h3 { @apply text-base font-semibold text-ink-900; }
+  .muted { @apply text-ink-500 text-sm; }
+  .table-wrap { @apply card overflow-x-auto; }
+  .page { @apply p-6 max-w-[1600px] mx-auto; }
+  .grid-card { @apply card-padded hover:shadow-pop transition cursor-pointer; }
+}
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 6px; }
+::-webkit-scrollbar-thumb:hover { background: #94a3b8; }

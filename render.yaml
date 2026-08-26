@@ -1,0 +1,44 @@
+# Render Blueprint — HR Governance Platform
+# يُستخدم عبر: Render Dashboard → New → Blueprint → اختر المستودع
+# أو عبر Render API: POST /v1/blueprints مع هذا الملف
+
+services:
+  - type: web
+    name: hr-gov-platform
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    plan: free
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      - key: PORT
+        value: 4000
+      - key: JWT_SECRET
+        generateValue: true
+      - key: JWT_EXPIRES_IN
+        value: 12h
+      - key: COOKIE_SECURE
+        value: "true"
+      - key: CLIENT_ORIGIN
+        value: "*"
+      - key: DEFAULT_LANG
+        value: ar
+      - key: DATABASE_URL
+        fromDatabase:
+          name: hr-gov-db
+          property: connectionString
+      - key: NODE_OPTIONS
+        value: "--max-old-space-size=512"
+
+databases:
+  - name: hr-gov-db
+    plan: free
+    databaseName: hr_gov
+    user: postgres
+    # PostgreSQL المجاني في Render تنتهي بعد 90 يوماً
+    # للاستمرارية استبدله بـ Supabase أو Neon المجاني

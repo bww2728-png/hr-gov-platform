@@ -1,0 +1,1725 @@
+// HR Governance & Institutional Transformation Platform
+// 38+ tables implementing 8 engines + RBAC + 42 maturity dimensions + 52-week roadmap
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// =====================================================================
+// ENUMS - Centralized type definitions
+// =====================================================================
+
+enum UserStatus {
+  active
+  inactive
+  locked
+}
+
+enum EmploymentStatus {
+  active
+  notice_period
+  on_leave
+  terminated
+}
+
+enum ContractType {
+  full_time
+  part_time
+  contract
+  intern
+  consultant
+}
+
+enum CandidateStage {
+  applied
+  screening
+  interview
+  assessment
+  offer
+  hired
+  rejected
+  withdrawn
+}
+
+enum DocumentStatus {
+  draft
+  in_review
+  approved
+  published
+  archived
+}
+
+enum WorkflowStatus {
+  running
+  approved
+  rejected
+  escalated
+  cancelled
+}
+
+enum ViolationSeverity {
+  info
+  warning
+  critical
+}
+
+enum ViolationStatus {
+  open
+  in_progress
+  resolved
+  false_positive
+}
+
+enum RiskStatus {
+  identified
+  assessed
+  mitigated
+  accepted
+  closed
+}
+
+enum RoadmapStatus {
+  pending
+  in_progress
+  done
+  blocked
+  skipped
+}
+
+enum KPIPeriod {
+  daily
+  weekly
+  monthly
+  quarterly
+  yearly
+}
+
+// =====================================================================
+// 1. IDENTITY & ACCESS (RBAC + ABAC)
+// =====================================================================
+
+model Role {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  nameAr      String    @map("name_ar")
+  nameEn      String    @map("name_en")
+  description String?
+  permissions Json      @default("[]")
+  isSystem    Boolean   @default(false) @map("is_system")
+  users       User[]
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@map("roles")
+}
+
+model PermissionCatalog {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  module      String
+  action      String
+  description String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([module])
+  @@map("permission_catalog")
+}
+
+model User {
+  id                 String         @id @default(uuid())
+  username           String         @unique
+  fullNameAr         String         @map("full_name_ar")
+  fullNameEn         String?        @map("full_name_en")
+  email              String?        @unique
+  phone              String?
+  passwordHash       String         @map("password_hash")
+  roleId             Int            @map("role_id")
+  role               Role           @relation(fields: [roleId], references: [id])
+  employeeId         String?        @unique @map("employee_id")
+  employee           Employee?      @relation(fields: [employeeId], references: [id])
+  status             UserStatus     @default(active)
+  mustChangePassword Boolean        @default(true) @map("must_change_password")
+  mfaEnabled         Boolean        @default(false) @map("mfa_enabled")
+  tokenVersion       Int            @default(0) @map("token_version")
+  lastLoginAt        DateTime?      @map("last_login_at")
+  failedLoginCount   Int            @default(0) @map("failed_login_count")
+  lockedUntil        DateTime?      @map("locked_until")
+  languagePref       String         @default("ar") @map("language_pref")
+  deletedAt          DateTime?      @map("deleted_at")
+  auditLogs          AuditLog[]
+  sessions           UserSession[]
+  scopes             UserScope[]
+  createdAt          DateTime       @default(now()) @map("created_at")
+  updatedAt          DateTime       @updatedAt @map("updated_at")
+
+  @@index([roleId])
+  @@index([status])
+  @@map("users")
+}
+
+model UserSession {
+  id              String    @id @default(uuid())
+  userId          String    @map("user_id")
+  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokenHash String   @map("refresh_token_hash")
+  ipAddress       String?   @map("ip_address")
+  userAgent       String?   @map("user_agent")
+  expiresAt       DateTime  @map("expires_at")
+  revokedAt       DateTime? @map("revoked_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+model UserScope {
+  id          Int      @id @default(autoincrement())
+  userId      String   @map("user_id")
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  scopeType   String   @map("scope_type") // region, branch, department
+  scopeId     Int      @map("scope_id")
+  canRead     Boolean  @default(true) @map("can_read")
+  canWrite    Boolean  @default(false) @map("can_write")
+  canApprove  Boolean  @default(false) @map("can_approve")
+  canDelete   Boolean  @default(false) @map("can_delete")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@unique([userId, scopeType, scopeId])
+  @@index([scopeType, scopeId])
+  @@map("user_scopes")
+}
+
+model AuditLog {
+  id           BigInt   @id @default(autoincrement())
+  userId       String?  @map("user_id")
+  user         User?    @relation(fields: [userId], references: [id])
+  action       String
+  entityType   String   @map("entity_type")
+  entityId     String?  @map("entity_id")
+  beforeJson   Json?    @map("before_json")
+  afterJson    Json?    @map("after_json")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  correlationId String? @map("correlation_id")
+  reason       String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
+
+// =====================================================================
+// 2. HR CORE ENGINE - Master records
+// =====================================================================
+
+model Region {
+  id        Int       @id @default(autoincrement())
+  code      String    @unique
+  nameAr    String    @map("name_ar")
+  nameEn    String    @map("name_en")
+  countryCode String  @map("country_code")
+  branches  Branch[]
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  @@map("regions")
+}
+
+model Branch {
+  id           Int        @id @default(autoincrement())
+  code         String     @unique
+  nameAr       String     @map("name_ar")
+  nameEn       String     @map("name_en")
+  regionId     Int        @map("region_id")
+  region       Region     @relation(fields: [regionId], references: [id])
+  timezone     String     @default("Asia/Riyadh")
+  workingHours String     @default("08:00-17:00") @map("working_hours")
+  isActive     Boolean    @default(true) @map("is_active")
+  departments  Department[]
+  employees    Employee[]
+  createdAt    DateTime   @default(now()) @map("created_at")
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@index([regionId])
+  @@map("branches")
+}
+
+model Department {
+  id        Int          @id @default(autoincrement())
+  code      String       @unique
+  nameAr    String       @map("name_ar")
+  nameEn    String       @map("name_en")
+  parentId  Int?         @map("parent_id")
+  parent    Department?  @relation("DeptHierarchy", fields: [parentId], references: [id])
+  children  Department[] @relation("DeptHierarchy")
+  headEmployeeId String? @map("head_employee_id")
+  branchId  Int?         @map("branch_id")
+  branch    Branch?      @relation(fields: [branchId], references: [id])
+  positions Position[]
+  employees Employee[]
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  @@index([parentId])
+  @@index([branchId])
+  @@map("departments")
+}
+
+model Position {
+  id         Int        @id @default(autoincrement())
+  code       String     @unique
+  titleAr    String     @map("title_ar")
+  titleEn    String     @map("title_en")
+  deptId     Int        @map("dept_id")
+  department Department @relation(fields: [deptId], references: [id])
+  level      Int        @default(1)
+  minSalary  Decimal?   @map("min_salary") @db.Decimal(12, 2)
+  maxSalary  Decimal?   @map("max_salary") @db.Decimal(12, 2)
+  isVacant   Boolean    @default(true) @map("is_vacant")
+  employees  Employee[]
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  @@index([deptId])
+  @@map("positions")
+}
+
+model Employee {
+  id              String           @id @default(uuid())
+  employeeNumber  String           @unique @map("employee_number")
+  fullNameAr      String           @map("full_name_ar")
+  fullNameEn      String?          @map("full_name_en")
+  nationalId      String?          @unique @map("national_id")
+  nationality     String?
+  residentType    String           @default("saudi") @map("resident_type") // saudi, expat
+  gender          String?
+  maritalStatus   String?          @map("marital_status")
+  dobGregorian    DateTime?        @map("dob_gregorian")
+  dobHijri        String?          @map("dob_hijri")
+  email           String?
+  phone           String?
+  address         String?
+  hireDate        DateTime         @map("hire_date")
+  contractEndDate DateTime?        @map("contract_end_date")
+  contractType    ContractType     @default(full_time)
+  employmentStatus EmploymentStatus @default(active) @map("employment_status")
+  probationEndDate DateTime?       @map("probation_end_date")
+  branchId        Int              @map("branch_id")
+  branch          Branch           @relation(fields: [branchId], references: [id])
+  deptId          Int              @map("dept_id")
+  department      Department       @relation(fields: [deptId], references: [id])
+  positionId      Int              @map("position_id")
+  position        Position         @relation(fields: [positionId], references: [id])
+  managerId       String?          @map("manager_id")
+  manager         Employee?        @relation("ReportsTo", fields: [managerId], references: [id])
+  reports         Employee[]       @relation("ReportsTo")
+  salary          Decimal          @default(0) @db.Decimal(12, 2)
+  currency        String           @default("SAR")
+  bankAccount     String?          @map("bank_account")
+  bankName        String?          @map("bank_name")
+  iban            String?
+  profilePhoto    String?          @map("profile_photo")
+  notes           String?
+  deletedAt       DateTime?        @map("deleted_at")
+  user            User?
+  history         EmployeeHistory[]
+  onboardingTasks OnboardingTask[]
+  exitInterview   ExitInterview?
+  createdAt       DateTime         @default(now()) @map("created_at")
+  updatedAt       DateTime         @updatedAt @map("updated_at")
+
+  @@index([branchId])
+  @@index([deptId])
+  @@index([managerId])
+  @@index([employmentStatus])
+  @@index([residentType])
+  @@map("employees")
+}
+
+model EmployeeHistory {
+  id           Int      @id @default(autoincrement())
+  employeeId   String   @map("employee_id")
+  employee     Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  changeType   String   @map("change_type") // promotion, transfer, salary_change, status_change
+  beforeJson   Json?    @map("before_json")
+  afterJson    Json     @map("after_json")
+  effectiveDate DateTime @map("effective_date")
+  approvedById String?  @map("approved_by_id")
+  reason       String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([changeType])
+  @@map("employee_history")
+}
+
+// =====================================================================
+// 3. LIFECYCLE ENGINE - Recruitment + Onboarding + Exit
+// =====================================================================
+
+model JobPosting {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  titleAr     String    @map("title_ar")
+  titleEn     String    @map("title_en")
+  description String?
+  branchId    Int?      @map("branch_id")
+  deptId      Int?      @map("dept_id")
+  status      String    @default("draft") // draft, open, on_hold, closed
+  openings    Int       @default(1)
+  publishedAt DateTime? @map("published_at")
+  closedAt    DateTime? @map("closed_at")
+  createdById String    @map("created_by_id")
+  applications Application[]
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([branchId])
+  @@map("job_postings")
+}
+
+model Candidate {
+  id          Int       @id @default(autoincrement())
+  fullNameAr  String    @map("full_name_ar")
+  fullNameEn  String?   @map("full_name_en")
+  email       String?
+  phone       String?
+  source      String    @default("portal") // portal, referral, agency, social
+  resumeUrl   String?   @map("resume_url")
+  parsedData  Json?     @map("parsed_data")
+  biasFlags   Json?     @map("bias_flags")
+  notes       String?
+  applications Application[]
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([email])
+  @@index([source])
+  @@map("candidates")
+}
+
+model Application {
+  id          Int            @id @default(autoincrement())
+  candidateId Int            @map("candidate_id")
+  candidate   Candidate      @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  postingId   Int            @map("posting_id")
+  posting     JobPosting     @relation(fields: [postingId], references: [id], onDelete: Cascade)
+  stage       CandidateStage @default(applied)
+  score       Float?
+  biasScore   Float?         @map("bias_score")
+  appliedAt   DateTime       @default(now()) @map("applied_at")
+  closedAt    DateTime?      @map("closed_at")
+  interviews  Interview[]
+  offer       Offer?
+
+  @@unique([candidateId, postingId])
+  @@index([stage])
+  @@index([postingId])
+  @@map("applications")
+}
+
+model Interview {
+  id            Int        @id @default(autoincrement())
+  applicationId Int        @map("application_id")
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  scheduledAt   DateTime   @map("scheduled_at")
+  durationMins  Int        @default(60) @map("duration_mins")
+  panelJson     Json?      @map("panel_json")
+  feedbackJson  Json?      @map("feedback_json")
+  decision      String?    // strong_hire, hire, no_hire, strong_no_hire
+  notes         String?
+  createdAt     DateTime   @default(now()) @map("created_at")
+
+  @@index([applicationId])
+  @@index([scheduledAt])
+  @@map("interviews")
+}
+
+model Offer {
+  id            Int        @id @default(autoincrement())
+  applicationId Int        @unique @map("application_id")
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  salary        Decimal    @db.Decimal(12, 2)
+  currency      String     @default("SAR")
+  benefits      Json?
+  startDate     DateTime   @map("start_date")
+  status        String     @default("draft") // draft, sent, accepted, declined, expired
+  sentAt        DateTime?  @map("sent_at")
+  respondedAt   DateTime?  @map("responded_at")
+  createdAt     DateTime   @default(now()) @map("created_at")
+
+  @@map("offers")
+}
+
+model OnboardingTask {
+  id           Int       @id @default(autoincrement())
+  employeeId   String    @map("employee_id")
+  employee     Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  taskCode     String    @map("task_code")
+  titleAr      String    @map("title_ar")
+  titleEn      String?   @map("title_en")
+  status       String    @default("pending") // pending, in_progress, done, blocked
+  dueDate      DateTime? @map("due_date")
+  completedAt  DateTime? @map("completed_at")
+  assigneeId   String?   @map("assignee_id")
+  notes        String?
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("onboarding_tasks")
+}
+
+model ExitInterview {
+  id              Int       @id @default(autoincrement())
+  employeeId      String    @unique @map("employee_id")
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  conductedAt     DateTime? @map("conducted_at")
+  conductedById   String?   @map("conducted_by_id")
+  primaryReason   String?   @map("primary_reason")
+  fiveWhysJson    Json?     @map("five_whys_json")
+  knowledgeTransfer Json?   @map("knowledge_transfer")
+  feedbackJson    Json?     @map("feedback_json")
+  satisfactionScore Int?    @map("satisfaction_score")
+  rehireEligible  Boolean   @default(true) @map("rehire_eligible")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@map("exit_interviews")
+}
+
+// =====================================================================
+// 4. KNOWLEDGE MANAGEMENT ENGINE
+// =====================================================================
+
+model KnowledgeDocument {
+  id              Int           @id @default(autoincrement())
+  code            String        @unique
+  titleAr         String        @map("title_ar")
+  titleEn         String?       @map("title_en")
+  contentMarkdown String        @map("content_markdown") @db.Text
+  category        String        // sop, guide, template, lesson_learned
+  tags            Json          @default("[]")
+  authorId        String        @map("author_id")
+  status          DocumentStatus @default(draft)
+  version         Int           @default(1)
+  parentVersionId Int?          @map("parent_version_id")
+  relatedDecisionId Int?        @map("related_decision_id")
+  publishedAt     DateTime?     @map("published_at")
+  archivedAt      DateTime?     @map("archived_at")
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([category])
+  @@map("knowledge_documents")
+}
+
+model DecisionRecord {
+  id              Int      @id @default(autoincrement())
+  code            String   @unique
+  titleAr         String   @map("title_ar")
+  contextMarkdown String   @map("context_markdown") @db.Text
+  decisionMarkdown String  @map("decision_markdown") @db.Text
+  consequencesMarkdown String? @map("consequences_markdown") @db.Text
+  decidedById     String   @map("decided_by_id")
+  decidedAt       DateTime @map("decided_at")
+  relatedDocsJson Json?    @map("related_docs_json")
+  // Hash chain for immutability
+  previousHash    String?  @map("previous_hash")
+  currentHash     String   @map("current_hash")
+  status          String   @default("active") // active, superseded, revoked
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([decidedAt])
+  @@map("decision_records")
+}
+
+model Policy {
+  id            Int       @id @default(autoincrement())
+  code          String    @unique
+  titleAr       String    @map("title_ar")
+  titleEn       String    @map("title_en")
+  contentMarkdown String  @map("content_markdown") @db.Text
+  jurisdiction  String    @default("SA") // SA, AE, EG, GLOBAL
+  effectiveDate DateTime  @map("effective_date")
+  expiryDate    DateTime? @map("expiry_date")
+  autoRenewal   Boolean   @default(false) @map("auto_renewal")
+  sourceUrl     String?   @map("source_url")
+  version       Int       @default(1)
+  status        DocumentStatus @default(draft)
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([jurisdiction])
+  @@index([status])
+  @@map("policies")
+}
+
+// =====================================================================
+// 5. WORKFLOW ENGINE
+// =====================================================================
+
+model WorkflowDefinition {
+  id            Int      @id @default(autoincrement())
+  code          String   @unique
+  nameAr        String   @map("name_ar")
+  nameEn        String   @map("name_en")
+  description   String?
+  definitionJson Json    @map("definition_json")
+  version       Int      @default(1)
+  isActive      Boolean  @default(true) @map("is_active")
+  instances     WorkflowInstance[]
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@map("workflow_definitions")
+}
+
+model WorkflowInstance {
+  id           Int               @id @default(autoincrement())
+  definitionId Int               @map("definition_id")
+  definition   WorkflowDefinition @relation(fields: [definitionId], references: [id])
+  entityType   String            @map("entity_type")
+  entityId     String            @map("entity_id")
+  currentStep  String            @map("current_step")
+  status       WorkflowStatus    @default(running)
+  startedAt    DateTime          @default(now()) @map("started_at")
+  closedAt     DateTime?         @map("closed_at")
+  steps        WorkflowStep[]
+
+  @@index([entityType, entityId])
+  @@index([status])
+  @@map("workflow_instances")
+}
+
+model WorkflowStep {
+  id           Int               @id @default(autoincrement())
+  instanceId   Int               @map("instance_id")
+  instance     WorkflowInstance  @relation(fields: [instanceId], references: [id], onDelete: Cascade)
+  stepCode     String            @map("step_code")
+  stepNameAr   String            @map("step_name_ar")
+  assigneeId   String?           @map("assignee_id")
+  decision     String?           // approved, rejected, delegated
+  decidedAt    DateTime?         @map("decided_at")
+  comments     String?
+  slaMinutes   Int               @default(60) @map("sla_minutes")
+  slaDeadline  DateTime          @map("sla_deadline")
+  escalatedAt  DateTime?         @map("escalated_at")
+  orderIndex   Int               @map("order_index")
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  @@index([instanceId])
+  @@index([assigneeId])
+  @@map("workflow_steps")
+}
+
+// =====================================================================
+// 6. COMPLIANCE ENGINE
+// =====================================================================
+
+model ComplianceRule {
+  id          Int       @id @default(autoincrement())
+  code        String    @unique
+  nameAr      String    @map("name_ar")
+  nameEn      String    @map("name_en")
+  description String?
+  jurisdiction String   @default("SA")
+  ruleJson    Json      @map("rule_json")
+  severity    ViolationSeverity @default(warning)
+  isActive    Boolean   @default(true) @map("is_active")
+  violations  ComplianceViolation[]
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  @@index([jurisdiction])
+  @@map("compliance_rules")
+}
+
+model ComplianceViolation {
+  id          Int               @id @default(autoincrement())
+  ruleId      Int               @map("rule_id")
+  rule        ComplianceRule    @relation(fields: [ruleId], references: [id])
+  entityType  String            @map("entity_type")
+  entityId    String            @map("entity_id")
+  severity    ViolationSeverity
+  status      ViolationStatus   @default(open)
+  detectedAt  DateTime          @default(now()) @map("detected_at")
+  resolvedById String?          @map("resolved_by_id")
+  resolvedAt  DateTime?         @map("resolved_at")
+  notes       String?
+  details     Json?
+
+  @@index([status])
+  @@index([severity])
+  @@index([entityType, entityId])
+  @@map("compliance_violations")
+}
+
+model DocumentExpiry {
+  id           Int       @id @default(autoincrement())
+  entityType   String    @map("entity_type")
+  entityId     String    @map("entity_id")
+  documentType String    @map("document_type")
+  documentRef  String?   @map("document_ref")
+  expiryDate   DateTime  @map("expiry_date")
+  alert30Sent  Boolean   @default(false) @map("alert_30_sent")
+  alert7Sent   Boolean   @default(false) @map("alert_7_sent")
+  alert0Sent   Boolean   @default(false) @map("alert_0_sent")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  @@index([expiryDate])
+  @@index([entityType, entityId])
+  @@map("document_expiries")
+}
+
+// =====================================================================
+// 7. OPERATIONAL EXCELLENCE + MATURITY + 5 WHYS
+// =====================================================================
+
+model ProcessKPI {
+  id              Int       @id @default(autoincrement())
+  processCode     String    @map("process_code")
+  nameAr          String    @map("name_ar")
+  nameEn          String    @map("name_en")
+  description     String?
+  targetValue     Float     @map("target_value")
+  currentValue    Float     @default(0) @map("current_value")
+  measurementUnit String    @map("measurement_unit")
+  frequency       KPIPeriod @default(monthly)
+  direction       String    @default("higher_is_better") // higher_is_better, lower_is_better
+  gapAuto         Float?    @map("gap_auto")
+  ownerId         String?   @map("owner_id")
+  lastMeasuredAt  DateTime? @map("last_measured_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@unique([processCode, nameAr])
+  @@map("process_kpis")
+}
+
+model MaturityDimension {
+  id          Int       @id @default(autoincrement())
+  axisId      Int       @map("axis_id") // 1-7
+  axisNameAr  String    @map("axis_name_ar")
+  axisNameEn  String    @map("axis_name_en")
+  code        Int       // 1-42
+  nameAr      String    @map("name_ar")
+  nameEn      String    @map("name_en")
+  description String?
+  weight      Float     @default(1.0)
+  assessments MaturityAssessment[]
+
+  @@unique([axisId, code])
+  @@map("maturity_dimensions")
+}
+
+model MaturityAssessment {
+  id            Int               @id @default(autoincrement())
+  dimensionId   Int               @map("dimension_id")
+  dimension     MaturityDimension @relation(fields: [dimensionId], references: [id])
+  score         Int               // 1-5
+  evidence      String?
+  targetScore   Int?              @map("target_score")
+  targetDate    DateTime?         @map("target_date")
+  assessorId    String            @map("assessor_id")
+  assessedAt    DateTime          @default(now()) @map("assessed_at")
+  notes         String?
+
+  @@index([dimensionId])
+  @@index([assessedAt])
+  @@map("maturity_assessments")
+}
+
+model FiveWhysAnalysis {
+  id           Int      @id @default(autoincrement())
+  title        String
+  problemDesc  String   @map("problem_desc") @db.Text
+  treeJson     Json     @map("tree_json") // {"why1": {"text": "...", "why2": {...}}}
+  rootCause    String?  @map("root_cause") @db.Text
+  correctiveAction String? @map("corrective_action") @db.Text
+  createdById  String   @map("created_by_id")
+  linkedEntityType String? @map("linked_entity_type")
+  linkedEntityId   String? @map("linked_entity_id")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("five_whys_analyses")
+}
+
+// =====================================================================
+// 8. RISK + ROADMAP + ANALYTICS
+// =====================================================================
+
+model Risk {
+  id              Int          @id @default(autoincrement())
+  code            String       @unique // C01-C15
+  titleAr         String       @map("title_ar")
+  titleEn         String       @map("title_en")
+  category        String       // operational, strategic, financial, compliance, security
+  probability     Int          // 1-5
+  impact          Int          // 1-5
+  score           Int          @default(0)
+  level           String       @default("low") // low, medium, high, critical
+  ownerId         String?      @map("owner_id")
+  mitigationPlan  String?      @map("mitigation_plan") @db.Text
+  status          RiskStatus   @default(identified)
+  reviewDate      DateTime?    @map("review_date")
+  createdAt       DateTime     @default(now()) @map("created_at")
+  updatedAt       DateTime     @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([level])
+  @@map("risks")
+}
+
+model RoadmapItem {
+  id            Int           @id @default(autoincrement())
+  weekNumber    Int           @map("week_number") // 1-52
+  titleAr       String        @map("title_ar")
+  titleEn       String        @map("title_en")
+  description   String?
+  ownerId       String?       @map("owner_id")
+  dependencies  Json          @default("[]")
+  deliverable   String?
+  kpi           String?
+  status        RoadmapStatus @default(pending)
+  targetDate    DateTime?     @map("target_date")
+  completedAt   DateTime?     @map("completed_at")
+  notes         String?
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@index([weekNumber])
+  @@index([status])
+  @@map("roadmap_items")
+}
+
+model AnalyticsEvent {
+  id          Int      @id @default(autoincrement())
+  eventType   String   @map("event_type")
+  entityType  String   @map("entity_type")
+  entityId    String?  @map("entity_id")
+  payloadJson Json?    @map("payload_json")
+  userId      String?  @map("user_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([eventType])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("analytics_events")
+}
+
+// =====================================================================
+// 9. INTEGRATION + LOOKUPS (Master lookups for dropdowns)
+// =====================================================================
+
+model IntegrationEndpoint {
+  id            Int       @id @default(autoincrement())
+  code          String    @unique
+  nameAr        String    @map("name_ar")
+  nameEn        String    @map("name_en")
+  baseUrl       String    @map("base_url")
+  authType      String    @default("api_key") @map("auth_type")
+  healthStatus  String    @default("unknown") @map("health_status")
+  lastCheckedAt DateTime? @map("last_checked_at")
+  configJson    Json?     @map("config_json")
+  isActive      Boolean   @default(true) @map("is_active")
+  logs          IntegrationLog[]
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@map("integration_endpoints")
+}
+
+model IntegrationLog {
+  id           Int                 @id @default(autoincrement())
+  endpointId   Int                 @map("endpoint_id")
+  endpoint     IntegrationEndpoint @relation(fields: [endpointId], references: [id])
+  requestId    String              @map("request_id")
+  requestBody  Json?               @map("request_body")
+  responseBody Json?               @map("response_body")
+  status       Int
+  latencyMs    Int                 @map("latency_ms")
+  error        String?
+  createdAt    DateTime            @default(now()) @map("created_at")
+
+  @@index([endpointId])
+  @@index([createdAt])
+  @@map("integration_logs")
+}
+
+model Lookup {
+  id        Int      @id @default(autoincrement())
+  category  String   // country, city, nationality, gender, marital_status, contract_type, etc.
+  code      String
+  valueAr   String   @map("value_ar")
+  valueEn   String   @map("value_en")
+  parentCategory String? @map("parent_category")
+  parentCode String? @map("parent_code")
+  sortOrder Int      @default(0) @map("sort_order")
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@unique([category, code])
+  @@index([category])
+  @@index([parentCategory, parentCode])
+  @@map("lookups")
+}
+
+model Setting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
+}
+
+// =====================================================================
+// 10. LEAVE MANAGEMENT (Transactions 29-36) — Saudi Labor Law
+// =====================================================================
+
+model LeaveType {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // annual, sick, maternity, paternity, hajj, marriage, bereavement, unpaid
+  nameAr      String   @map("name_ar")
+  nameEn      String   @map("name_en")
+  // Saudi rules: { daysPerYear, accrualMonthly, requiresServiceYears, maxPerLifetime, payTiers:[{upto,pct}], gender, requiresDocs }
+  rulesJson   Json     @map("rules_json")
+  isActive    Boolean  @default(true) @map("is_active")
+  requests    LeaveRequest[]
+  balances    LeaveBalance[]
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("leave_types")
+}
+
+model LeaveBalance {
+  id           Int        @id @default(autoincrement())
+  employeeId   String     @map("employee_id")
+  leaveTypeId  Int        @map("leave_type_id")
+  leaveType    LeaveType  @relation(fields: [leaveTypeId], references: [id])
+  year         Int
+  entitled     Float      @default(0) // المستحق السنوي
+  accrued      Float      @default(0) // المتراكم حتى اليوم
+  used         Float      @default(0)
+  carried      Float      @default(0) // مرحّل من سنوات سابقة
+  updatedAt    DateTime   @updatedAt @map("updated_at")
+
+  @@unique([employeeId, leaveTypeId, year])
+  @@index([employeeId])
+  @@map("leave_balances")
+}
+
+model LeaveRequest {
+  id            Int        @id @default(autoincrement())
+  employeeId    String     @map("employee_id")
+  leaveTypeId   Int        @map("leave_type_id")
+  leaveType     LeaveType  @relation(fields: [leaveTypeId], references: [id])
+  startDate     DateTime   @map("start_date")
+  endDate       DateTime   @map("end_date")
+  days          Float
+  reason        String?
+  attachmentUrl String?    @map("attachment_url")
+  status        String     @default("pending") // pending, manager_approved, approved, rejected, cancelled
+  managerId     String?    @map("manager_id")
+  managerNote   String?    @map("manager_note")
+  hrApproverId  String?    @map("hr_approver_id")
+  hrNote        String?    @map("hr_note")
+  decidedAt     DateTime?  @map("decided_at")
+  returnedAt    DateTime?  @map("returned_at") // تسجيل العودة الفعلي
+  deletedAt     DateTime?  @map("deleted_at")
+  createdAt     DateTime   @default(now()) @map("created_at")
+  updatedAt     DateTime   @updatedAt @map("updated_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([startDate])
+  @@map("leave_requests")
+}
+
+model OfficialHoliday {
+  id        Int      @id @default(autoincrement())
+  nameAr    String   @map("name_ar")
+  nameEn    String   @map("name_en")
+  startDate DateTime @map("start_date")
+  endDate   DateTime @map("end_date")
+  year      Int
+
+  @@map("official_holidays")
+}
+
+// =====================================================================
+// 11. ATTENDANCE (Transactions 26-28)
+// =====================================================================
+
+model AttendanceRecord {
+  id          Int       @id @default(autoincrement())
+  employeeId  String    @map("employee_id")
+  date        DateTime  @db.Date
+  checkIn     DateTime? @map("check_in")
+  checkOut    DateTime? @map("check_out")
+  method      String    @default("manual") // fingerprint, gps, card, manual
+  lateMins    Int       @default(0) @map("late_mins")
+  earlyMins   Int       @default(0) @map("early_mins")
+  workedHours Float     @default(0) @map("worked_hours")
+  status      String    @default("present") // present, absent, leave, holiday, remote
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([employeeId, date])
+  @@index([date])
+  @@index([status])
+  @@map("attendance_records")
+}
+
+model OvertimeRequest {
+  id          Int       @id @default(autoincrement())
+  employeeId  String    @map("employee_id")
+  date        DateTime  @db.Date
+  hours       Float
+  reason      String
+  isEmergency Boolean   @default(false) @map("is_emergency")
+  status      String    @default("pending") // pending, approved, rejected
+  approvedById String?  @map("approved_by_id")
+  decidedAt   DateTime? @map("decided_at")
+  yearCap     Int       @default(720) @map("year_cap") // سقف نظام العمل
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("overtime_requests")
+}
+
+model AttendanceIncident {
+  id          Int      @id @default(autoincrement())
+  employeeId  String   @map("employee_id")
+  type        String   // late, absence, early_leave
+  date        DateTime @db.Date
+  minsLate    Int?     @map("mins_late")
+  hasExcuse   Boolean  @default(false) @map("has_excuse")
+  excuseNote  String?  @map("excuse_note")
+  action      String?  // warning_1, warning_2, deduction, none
+  occurrence  Int      @default(1) // تكرار المخالفة
+  resolvedById String? @map("resolved_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([type])
+  @@map("attendance_incidents")
+}
+
+// =====================================================================
+// 12. PAYROLL (Transactions 50-53, 56)
+// =====================================================================
+
+model PayrollRun {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique // PAY-2026-08
+  month       Int
+  year        Int
+  status      String   @default("draft") // draft, calculated, reviewed, approved, paid, archived
+  totalGross  Decimal  @default(0) @db.Decimal(14, 2) @map("total_gross")
+  totalNet    Decimal  @default(0) @db.Decimal(14, 2) @map("total_net")
+  totalGosi   Decimal  @default(0) @db.Decimal(14, 2) @map("total_gosi")
+  preparedById String? @map("prepared_by_id")
+  reviewedById String? @map("reviewed_by_id")
+  approvedById String? @map("approved_by_id")
+  paidAt      DateTime? @map("paid_at")
+  wpsFileId   Int?     @map("wps_file_id")
+  items       PayrollItem[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([month, year])
+  @@map("payroll_runs")
+}
+
+model PayrollItem {
+  id          Int        @id @default(autoincrement())
+  runId       Int        @map("run_id")
+  run         PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employeeId  String     @map("employee_id")
+  baseSalary  Decimal    @db.Decimal(12, 2) @map("base_salary")
+  housing     Decimal    @default(0) @db.Decimal(12, 2)
+  transport   Decimal    @default(0) @db.Decimal(12, 2)
+  otherAllow  Decimal    @default(0) @db.Decimal(12, 2) @map("other_allow")
+  overtimePay Decimal    @default(0) @db.Decimal(12, 2) @map("overtime_pay")
+  bonusPay    Decimal    @default(0) @db.Decimal(12, 2) @map("bonus_pay")
+  gosiEmployee Decimal   @default(0) @db.Decimal(12, 2) @map("gosi_employee") // 9.75%
+  gosiEmployer Decimal   @default(0) @db.Decimal(12, 2) @map("gosi_employer") // 11.75%
+  loanDeduct  Decimal    @default(0) @db.Decimal(12, 2) @map("loan_deduct")
+  absenceDeduct Decimal  @default(0) @db.Decimal(12, 2) @map("absence_deduct")
+  otherDeduct Decimal    @default(0) @db.Decimal(12, 2) @map("other_deduct")
+  gross       Decimal    @db.Decimal(12, 2)
+  net         Decimal    @db.Decimal(12, 2)
+  iban        String?
+  createdAt   DateTime   @default(now()) @map("created_at")
+
+  @@unique([runId, employeeId])
+  @@index([employeeId])
+  @@map("payroll_items")
+}
+
+model Loan {
+  id            Int      @id @default(autoincrement())
+  employeeId    String   @map("employee_id")
+  amount        Decimal  @db.Decimal(12, 2)
+  months        Int
+  monthlyDeduct Decimal  @db.Decimal(12, 2) @map("monthly_deduct")
+  remaining     Decimal  @db.Decimal(12, 2)
+  reason        String?
+  status        String   @default("pending") // pending, approved, rejected, active, settled
+  approvedById  String?  @map("approved_by_id")
+  startDate     DateTime? @map("start_date")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("loans")
+}
+
+model Bonus {
+  id          Int      @id @default(autoincrement())
+  employeeId  String   @map("employee_id")
+  amount      Decimal  @db.Decimal(12, 2)
+  type        String   // performance, annual, exceptional, eid
+  reason      String?
+  status      String   @default("pending") // pending, manager_ok, director_ok, approved, paid, rejected
+  nominatedById String? @map("nominated_by_id")
+  payrollRunId Int?    @map("payroll_run_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("bonuses")
+}
+
+model EosCalculation {
+  id            Int      @id @default(autoincrement())
+  employeeId    String   @map("employee_id")
+  reason        String   // resignation, termination, retirement
+  serviceYears  Float    @map("service_years")
+  lastSalary    Decimal  @db.Decimal(12, 2) @map("last_salary")
+  eosAmount     Decimal  @db.Decimal(12, 2) @map("eos_amount")
+  otherDues     Decimal  @default(0) @db.Decimal(12, 2) @map("other_dues") // رصيد إجازات نقدي إلخ
+  totalPayable  Decimal  @db.Decimal(12, 2) @map("total_payable")
+  formulaJson   Json     @map("formula_json") // تفصيل الحساب
+  status        String   @default("calculated") // calculated, approved, paid
+  calculatedById String? @map("calculated_by_id")
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@map("eos_calculations")
+}
+
+// =====================================================================
+// 13. PERFORMANCE (Transactions 37-41)
+// =====================================================================
+
+model PerfCycle {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique // CYCLE-2026
+  nameAr    String   @map("name_ar")
+  startDate DateTime @map("start_date")
+  endDate   DateTime @map("end_date")
+  status    String   @default("active") // planning, active, review, closed
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("perf_cycles")
+}
+
+model Objective {
+  id          Int      @id @default(autoincrement())
+  employeeId  String   @map("employee_id")
+  cycleId     Int      @map("cycle_id")
+  title       String
+  description String?
+  weight      Float    @default(1.0)
+  status      String   @default("draft") // draft, active, achieved, partial, missed
+  keyResults  KeyResult[]
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([cycleId])
+  @@map("objectives")
+}
+
+model KeyResult {
+  id          Int       @id @default(autoincrement())
+  objectiveId Int       @map("objective_id")
+  objective   Objective @relation(fields: [objectiveId], references: [id], onDelete: Cascade)
+  title       String
+  targetValue Float     @map("target_value")
+  currentValue Float    @default(0) @map("current_value")
+  unit        String
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([objectiveId])
+  @@map("key_results")
+}
+
+model PerfReview {
+  id          Int      @id @default(autoincrement())
+  employeeId  String   @map("employee_id")
+  cycleId     Int      @map("cycle_id")
+  reviewerId  String   @map("reviewer_id")
+  selfScore   Float?   @map("self_score")
+  managerScore Float?  @map("manager_score")
+  finalScore  Float?   @map("final_score")
+  rating      String?  // exceptional, exceeds, meets, below, poor
+  strengths   String?
+  improvements String?
+  status      String   @default("pending_self") // pending_self, pending_manager, pending_review, completed
+  signedAt    DateTime? @map("signed_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([cycleId])
+  @@map("perf_reviews")
+}
+
+model FeedbackEntry {
+  id          Int      @id @default(autoincrement())
+  employeeId  String   @map("employee_id") // المُقيَّم
+  giverId     String   @map("giver_id")    // المُقيِّم
+  type        String   // continuous, peer, 360
+  cycleId     Int?     @map("cycle_id")
+  isAnonymous Boolean  @default(false) @map("is_anonymous")
+  content     String   @db.Text
+  sentiment   String?  // positive, constructive
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@map("feedback_entries")
+}
+
+model Pip {
+  id          Int      @id @default(autoincrement())
+  employeeId  String   @map("employee_id")
+  managerId   String   @map("manager_id")
+  startDate   DateTime @map("start_date")
+  endDate     DateTime @map("end_date")
+  goalsJson   Json     @map("goals_json") // أهداف محددة + موارد دعم
+  status      String   @default("active") // active, extended, passed, failed, cancelled
+  outcomeNote String?  @map("outcome_note")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@map("pips")
+}
+
+// =====================================================================
+// 14. LEARNING & DEVELOPMENT (Transactions 42-46)
+// =====================================================================
+
+model Course {
+  id          Int      @id @default(autoincrement())
+  code        String   @unique
+  titleAr     String   @map("title_ar")
+  titleEn     String   @map("title_en")
+  category    String   // technical, soft_skills, compliance, leadership
+  provider    String?  // internal, external
+  durationHrs Float    @default(0) @map("duration_hrs")
+  isActive    Boolean  @default(true) @map("is_active")
+  sessions    CourseSession[]
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("courses")
+}
+
+model CourseSession {
+  id         Int       @id @default(autoincrement())
+  courseId   Int       @map("course_id")
+  course     Course    @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  startDate  DateTime  @map("start_date")
+  endDate    DateTime  @map("end_date")
+  location   String?   // onsite, online
+  trainerName String?  @map("trainer_name")
+  capacity   Int       @default(20)
+  status     String    @default("scheduled") // scheduled, running, completed, cancelled
+  enrollments Enrollment[]
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([courseId])
+  @@map("course_sessions")
+}
+
+model Enrollment {
+  id          Int           @id @default(autoincrement())
+  sessionId   Int           @map("session_id")
+  session     CourseSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  employeeId  String        @map("employee_id")
+  status      String        @default("enrolled") // enrolled, attended, completed, no_show, cancelled
+  attendedHrs Float         @default(0) @map("attended_hrs")
+  testScore   Float?        @map("test_score")
+  // تقييم كيركباتريك: reaction, learning, behavior, results
+  evalJson    Json?         @map("eval_json")
+  createdAt   DateTime      @default(now()) @map("created_at")
+
+  @@unique([sessionId, employeeId])
+  @@index([employeeId])
+  @@map("enrollments")
+}
+
+model Certificate {
+  id          Int       @id @default(autoincrement())
+  employeeId  String    @map("employee_id")
+  title       String
+  issuer      String?
+  issuedAt    DateTime? @map("issued_at")
+  expiresAt   DateTime? @map("expires_at")
+  fileUrl     String?   @map("file_url")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@map("certificates")
+}
+
+model Idp {
+  id          Int      @id @default(autoincrement())
+  employeeId  String   @map("employee_id")
+  managerId   String   @map("manager_id")
+  goalsJson   Json     @map("goals_json") // أهداف مهنية + فجوات + إجراءات + موارد + جدول
+  status      String   @default("active") // active, completed, cancelled
+  progress    Int      @default(0) // 0-100
+  reviewDate  DateTime? @map("review_date")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([employeeId])
+  @@map("idps")
+}
+
+model MentoringPair {
+  id          Int       @id @default(autoincrement())
+  mentorId    String    @map("mentor_id")
+  menteeId    String    @map("mentee_id")
+  startDate   DateTime  @map("start_date")
+  endDate     DateTime? @map("end_date")
+  focusArea   String?   @map("focus_area")
+  status      String    @default("active") // active, completed
+  sessionsLog Json      @default("[]") @map("sessions_log")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([mentorId])
+  @@index([menteeId])
+  @@map("mentoring_pairs")
+}
+
+// =====================================================================
+// 15. TALENT + RETENTION (Transactions 47-53)
+// =====================================================================
+
+model SuccessionPlan {
+  id           Int     @id @default(autoincrement())
+  positionId   Int     @map("position_id")
+  status       String  @default("active") // active, archived
+  approvedById String? @map("approved_by_id")
+  candidates   SuccessionCandidate[]
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  @@map("succession_plans")
+}
+
+model SuccessionCandidate {
+  id           Int            @id @default(autoincrement())
+  planId       Int            @map("plan_id")
+  plan         SuccessionPlan @relation(fields: [planId], references: [id], onDelete: Cascade)
+  employeeId   String         @map("employee_id")
+  readiness    String         // ready_now, ready_1y, ready_2_3y
+  developmentNote String?     @map("development_note")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  @@unique([planId, employeeId])
+  @@map("succession_candidates")
+}
+
+model HipoMember {
+  id          Int      @id @default(autoincrement())
+  employeeId  String   @unique @map("employee_id")
+  nominatedById String? @map("nominated_by_id")
+  programJson Json?    @map("program_json") // برامج خاصة + مشاريع + إرشاد
+  status      String   @default("active") // active, graduated, removed
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("hipo_members")
+}
+
+model Survey {
+  id        Int      @id @default(autoincrement())
+  code      String   @unique
+  titleAr   String   @map("title_ar")
+  type      String   // enps, pulse, engagement
+  status    String   @default("draft") // draft, open, closed
+  opensAt   DateTime? @map("opens_at")
+  closesAt  DateTime? @map("closes_at")
+  isAnonymous Boolean @default(true) @map("is_anonymous")
+  questions SurveyQuestion[]
+  responses SurveyResponse[]
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("surveys")
+}
+
+model SurveyQuestion {
+  id       Int     @id @default(autoincrement())
+  surveyId Int     @map("survey_id")
+  survey   Survey  @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  text     String
+  scale    String  @default("0_10") // 0_10, 1_5, text
+  orderIndex Int   @map("order_index")
+
+  @@index([surveyId])
+  @@map("survey_questions")
+}
+
+model SurveyResponse {
+  id         Int      @id @default(autoincrement())
+  surveyId   Int      @map("survey_id")
+  survey     Survey   @relation(fields: [surveyId], references: [id], onDelete: Cascade)
+  answersJson Json    @map("answers_json") // {questionId: value}
+  deptId     Int?     @map("dept_id") // لتجميع النتائج فقط (سرية)
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([surveyId])
+  @@map("survey_responses")
+}
+
+model StayInterview {
+  id            Int      @id @default(autoincrement())
+  employeeId    String   @map("employee_id")
+  conductedById String   @map("conducted_by_id")
+  conductedAt   DateTime @map("conducted_at")
+  satisfaction  Int?     // 1-10
+  issuesJson    Json?    @map("issues_json")
+  actionsJson   Json?    @map("actions_json")
+  followUpAt    DateTime? @map("follow_up_at")
+  status        String   @default("done") // done, follow_up
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@map("stay_interviews")
+}
+
+// =====================================================================
+// 16. LABOR RELATIONS (Transactions 65-68)
+// =====================================================================
+
+model DisciplinaryCase {
+  id          Int      @id @default(autoincrement())
+  employeeId  String   @map("employee_id")
+  violation   String
+  severity    String   // minor, medium, major, severe
+  investigationNote String? @map("investigation_note") @db.Text
+  employeeDefense String? @map("employee_defense") @db.Text
+  action      String?  // warning_written, fine, suspension, termination, none
+  status      String   @default("investigating") // investigating, decided, appealed, closed
+  appealNote  String?  @map("appeal_note")
+  decidedById String?  @map("decided_by_id")
+  decidedAt   DateTime? @map("decided_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("disciplinary_cases")
+}
+
+model Grievance {
+  id          Int      @id @default(autoincrement())
+  employeeId  String   @map("employee_id")
+  subject     String
+  details     String   @db.Text
+  status      String   @default("submitted") // submitted, investigating, resolved, escalated, closed
+  resolution  String?
+  resolvedById String? @map("resolved_by_id")
+  escalatedToId String? @map("escalated_to_id")
+  satisfied   Boolean?
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("grievances")
+}
+
+// =====================================================================
+// 17. EXPAT / GOVERNMENT SERVICES (Transactions 12-19, 79-86)
+// =====================================================================
+
+model Visa {
+  id          Int       @id @default(autoincrement())
+  employeeId  String?   @map("employee_id")
+  candidateName String? @map("candidate_name") // قبل التوظيف
+  type        String    // work, exit_reentry_single, exit_reentry_multi, final_exit, family_visit
+  status      String    @default("requested") // requested, issued, used, expired, cancelled
+  issuedAt    DateTime? @map("issued_at")
+  expiresAt   DateTime? @map("expires_at")
+  feesPaid    Decimal?  @db.Decimal(10, 2) @map("fees_paid")
+  refNumber   String?   @map("ref_number")
+  notes       String?
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([type])
+  @@index([status])
+  @@map("visas")
+}
+
+model IqamaRecord {
+  id          Int       @id @default(autoincrement())
+  employeeId  String    @map("employee_id")
+  iqamaNumber String?   @map("iqama_number")
+  profession  String?   // المهنة في الإقامة
+  issuedAt    DateTime? @map("issued_at")
+  expiresAt   DateTime? @map("expires_at")
+  status      String    @default("active") // active, expired, cancelled, transferred
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([expiresAt])
+  @@map("iqama_records")
+}
+
+model GosiRecord {
+  id            Int      @id @default(autoincrement())
+  employeeId    String   @map("employee_id")
+  gosiNumber    String?  @map("gosi_number")
+  registeredAt  DateTime @map("registered_at")
+  salaryBase    Decimal  @db.Decimal(12, 2) @map("salary_base")
+  employeeShare Decimal  @db.Decimal(10, 2) @map("employee_share") // 9.75%
+  employerShare Decimal  @db.Decimal(10, 2) @map("employer_share") // 11.75%
+  status        String   @default("active") // active, deregistered
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@map("gosi_records")
+}
+
+model GamcaRecord {
+  id          Int       @id @default(autoincrement())
+  candidateName String  @map("candidate_name")
+  passportNo  String?   @map("passport_no")
+  examDate    DateTime? @map("exam_date")
+  result      String?   // fit, unfit
+  validUntil  DateTime? @map("valid_until") // صلاحية 3 أشهر
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@map("gamca_records")
+}
+
+model Attestation {
+  id          Int      @id @default(autoincrement())
+  employeeId  String?  @map("employee_id")
+  candidateName String? @map("candidate_name")
+  documentType String  @map("document_type") // degree, certificate
+  stage       String   @default("university") // university, foreign_ministry, saudi_embassy, mofa_sa, moet_equation, done
+  status      String   @default("in_progress") // in_progress, done, rejected
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("attestations")
+}
+
+model KafalaTransfer {
+  id            Int      @id @default(autoincrement())
+  employeeId    String   @map("employee_id")
+  fromEmployer  String?  @map("from_employer")
+  toEmployer    String?  @map("to_employer")
+  reason        String?  // normal, salary_delay_3m, abuse_court
+  currentSponsorOk Boolean @default(false) @map("current_sponsor_ok")
+  feesPaid      Decimal? @db.Decimal(10, 2) @map("fees_paid") // 2000-10000
+  status        String   @default("requested") // requested, sponsor_ok, gov_ok, done, rejected
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@map("kafala_transfers")
+}
+
+model HuroobReport {
+  id          Int      @id @default(autoincrement())
+  employeeId  String   @map("employee_id")
+  absenceSince DateTime @map("absence_since")
+  warningsSent Int     @default(0) @map("warnings_sent")
+  reportedAt  DateTime? @map("reported_at") // تسجيل "هارب" في أبشر
+  status      String   @default("monitoring") // monitoring, reported, cancelled, deported
+  resolvedAt  DateTime? @map("resolved_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@map("huroob_reports")
+}
+
+// =====================================================================
+// 18. HEALTH INSURANCE (Transaction 58)
+// =====================================================================
+
+model InsurancePolicy {
+  id          Int      @id @default(autoincrement())
+  provider    String   // شركة التأمين
+  policyNumber String  @unique @map("policy_number")
+  planName    String   @map("plan_name")
+  startDate   DateTime @map("start_date")
+  endDate     DateTime @map("end_date")
+  premium     Decimal  @db.Decimal(12, 2)
+  members     InsuranceMember[]
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("insurance_policies")
+}
+
+model InsuranceMember {
+  id         Int             @id @default(autoincrement())
+  policyId   Int             @map("policy_id")
+  policy     InsurancePolicy @relation(fields: [policyId], references: [id], onDelete: Cascade)
+  employeeId String          @map("employee_id")
+  relation   String          @default("self") // self, spouse, child
+  cardNumber String?         @map("card_number")
+  createdAt  DateTime        @default(now()) @map("created_at")
+
+  @@unique([policyId, employeeId, relation])
+  @@index([employeeId])
+  @@map("insurance_members")
+}
+
+// =====================================================================
+// 19. DOCS + PROBATION + SAUDI COMPLIANCE + REQUESTS CENTER + SECURITY
+// =====================================================================
+
+model EmployeeDocument {
+  id          Int       @id @default(autoincrement())
+  employeeId  String    @map("employee_id")
+  docType     String    @map("doc_type") // national_id, iqama, passport, contract, degree, gosi, other
+  docNumber   String?   @map("doc_number")
+  fileUrl     String?   @map("file_url")
+  issuedAt    DateTime? @map("issued_at")
+  expiresAt   DateTime? @map("expires_at")
+  verified    Boolean   @default(false)
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([docType])
+  @@index([expiresAt])
+  @@map("employee_documents")
+}
+
+model ProbationReview {
+  id          Int       @id @default(autoincrement())
+  employeeId  String    @map("employee_id")
+  milestone   Int       // 45, 60, 90 (يوم)
+  reviewDate  DateTime  @map("review_date")
+  performance String    // excellent, good, weak
+  notes       String?
+  decision    String?   // continue, warning_pip, terminate, confirm
+  reviewerId  String?   @map("reviewer_id")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([employeeId, milestone])
+  @@map("probation_reviews")
+}
+
+model NitaqatSnapshot {
+  id            Int      @id @default(autoincrement())
+  snapshotDate  DateTime @map("snapshot_date") @db.Date
+  totalEmployees Int     @map("total_employees")
+  saudiCount    Int      @map("saudi_count")
+  expatCount    Int      @map("expat_count")
+  saudizationPct Float   @map("saudization_pct")
+  band          String   // platinum, green_high, green_mid, green_low, yellow, red
+  notes         String?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  @@map("nitaqat_snapshots")
+}
+
+model WpsFile {
+  id          Int       @id @default(autoincrement())
+  payrollRunId Int?     @map("payroll_run_id")
+  month       Int
+  year        Int
+  fileRef     String?   @map("file_ref")
+  status      String    @default("generated") // generated, uploaded, confirmed, failed
+  uploadedAt  DateTime? @map("uploaded_at")
+  confirmedAt DateTime? @map("confirmed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@unique([month, year])
+  @@map("wps_files")
+}
+
+model RegulatoryReport {
+  id          Int      @id @default(autoincrement())
+  type        String   // gosi, zatca, labor_office, stats
+  period      String   // 2026-Q2
+  payloadJson Json?    @map("payload_json")
+  status      String   @default("draft") // draft, submitted, accepted
+  submittedAt DateTime? @map("submitted_at")
+  createdById String?  @map("created_by_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@map("regulatory_reports")
+}
+
+// =====================================================================
+// 20. UNIFIED REQUESTS CENTER (Employee self-service hub)
+// =====================================================================
+
+model RequestType {
+  id          Int     @id @default(autoincrement())
+  code        String  @unique // leave, loan, training, certificate, overtime, data_update
+  nameAr      String  @map("name_ar")
+  nameEn      String  @map("name_en")
+  workflowDefCode String? @map("workflow_def_code") // يربط بمحرك سير العمل
+  formSchema  Json?   @map("form_schema") // حقول النموذج
+  isActive    Boolean @default(true) @map("is_active")
+  requests    EmployeeRequest[]
+
+  @@map("request_types")
+}
+
+model EmployeeRequest {
+  id            Int         @id @default(autoincrement())
+  typeId        Int         @map("type_id")
+  type          RequestType @relation(fields: [typeId], references: [id])
+  employeeId    String      @map("employee_id")
+  payloadJson   Json        @map("payload_json") // تفاصيل الطلب حسب نوعه
+  status        String      @default("submitted") // submitted, in_approval, approved, rejected, done, cancelled
+  workflowInstanceId Int?   @map("workflow_instance_id")
+  decidedById   String?     @map("decided_by_id")
+  decidedAt     DateTime?   @map("decided_at")
+  note          String?
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  @@index([employeeId])
+  @@index([typeId])
+  @@index([status])
+  @@map("employee_requests")
+}
+
+// =====================================================================
+// 21. SECURITY (System Admin / Security Admin)
+// =====================================================================
+
+model SecurityEvent {
+  id        BigInt   @id @default(autoincrement())
+  userId    String?  @map("user_id")
+  type      String   // login_failed, login_locked, password_reset, mfa_change, permission_change, sensitive_access, override
+  severity  String   @default("info") // info, warning, critical
+  details   Json?
+  ipAddress String?  @map("ip_address")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("security_events")
+}
