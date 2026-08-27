@@ -3,9 +3,8 @@
  * Verifies: auth, RBAC, all major endpoints.
  * Requires running server on http://localhost:4000
  */
-const http = require('http');
-
-const BASE = 'http://localhost:4000';
+const BASE = process.env.BASE_URL || 'http://localhost:4000';
+const http = require(BASE.startsWith('https') ? 'https' : 'http');
 
 function req(method, path, body, cookies = '') {
   return new Promise((resolve, reject) => {

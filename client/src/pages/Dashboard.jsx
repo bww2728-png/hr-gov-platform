@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, Navigate } from 'react-router-dom';
 import client, { errMsg } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { fmtDate } from '../utils/datetime';
@@ -9,12 +9,12 @@ export default function Dashboard() {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const canSee = has('analytics.dashboard.read');
 
   useEffect(() => {
     let cancelled = false;
-    if (!has('analytics.dashboard.read')) {
+    if (!canSee) {
       setLoading(false);
-      setError(null);
       return () => { cancelled = true; };
     }
     client
@@ -23,7 +23,10 @@ export default function Dashboard() {
       .catch((err) => { if (!cancelled) setError(errMsg(err)); })
       .finally(() => { if (!cancelled) setLoading(false); });
     return () => { cancelled = true; };
-  }, [has]);
+  }, [canSee]);
+
+  // Roles without analytics scope (e.g. employee) go straight to their self-service hub.
+  if (!canSee) return <Navigate to="/my-hub" replace />;
 
   const cards = stats && [
     { label: 'إجمالي الموظفين', value: stats.totalEmployees, color: 'bg-primary-50 text-primary-700', to: '/employees' },
@@ -55,8 +58,10 @@ export default function Dashboard() {
               <div className="h-8 bg-ink-100 rounded w-3/4" />
             </div>
           ))
+        ) : error ? (
+          <div className="card-padded text-danger-600 text-sm">{error}</div>
         ) : (
-          cards.map((c, i) => (
+          (cards || []).map((c, i) => (
             <Link key={i} to={c.to} className="grid-card flex flex-col">
               <div className={`inline-flex self-start px-2.5 py-1 rounded-md text-xs font-medium ${c.color}`}>{c.label}</div>
               <div className="text-3xl font-bold mt-3 text-ink-900">{c.value}</div>
