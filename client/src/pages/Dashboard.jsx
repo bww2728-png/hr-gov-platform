@@ -1,17 +1,29 @@
 import React, { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import client from '../api/client';
+import client, { errMsg } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { fmtDate } from '../utils/datetime';
 
 export default function Dashboard() {
-  const { user } = useAuth();
+  const { user, has } = useAuth();
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    client.get('/analytics/dashboard').then(({ data }) => setStats(data)).finally(() => setLoading(false));
-  }, []);
+    let cancelled = false;
+    if (!has('analytics.dashboard.read')) {
+      setLoading(false);
+      setError(null);
+      return () => { cancelled = true; };
+    }
+    client
+      .get('/analytics/dashboard')
+      .then(({ data }) => { if (!cancelled) { setStats(data); setError(null); } })
+      .catch((err) => { if (!cancelled) setError(errMsg(err)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [has]);
 
   const cards = stats && [
     { label: 'إجمالي الموظفين', value: stats.totalEmployees, color: 'bg-primary-50 text-primary-700', to: '/employees' },

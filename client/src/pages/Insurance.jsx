@@ -1,26 +1,58 @@
 import React, { useEffect, useState } from 'react';
 import client from '../api/client';
+import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { fmtDate } from '../utils/datetime';
 
 export default function Insurance() {
+  const { has } = useAuth();
   const toast = useToast();
   const [policies, setPolicies] = useState([]);
   const [members, setMembers] = useState([]);
   const [selected, setSelected] = useState(null);
+  const [me, setMe] = useState([]);
 
   function load() {
-    client.get('/insurance/policies').then(({ data }) => setPolicies(data.policies)).catch(() => {});
+    if (has('insurance.read')) {
+      client.get('/insurance/policies').then(({ data }) => setPolicies(data.policies)).catch(() => {});
+    } else {
+      client.get('/insurance/me').then(({ data }) => setMe(data.memberships)).catch(() => {});
+    }
   }
-  useEffect(load, []);
+  useEffect(load, [has]);
 
   function showMembers(p) {
-    client.get(`/insurance/policies/${p.id}/members`).then(({ data }) => { setMembers(data.members); setSelected(p); });
+    client
+      .get(`/insurance/policies/${p.id}/members`)
+      .then(({ data }) => { setMembers(data.members); setSelected(p); })
+      .catch((err) => toast.error(err.response?.data?.error || 'فشل تحميل الأعضاء'));
   }
 
   return (
     <div className="page space-y-4">
       <h1 className="h1">التأمين الصحي</h1>
+
+      {me.length > 0 && (
+        <div className="card-padded">
+          <h2 className="h3 mb-3">عضويتي في التأمين</h2>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>الجهة</th><th>الخطة</th><th>الصلة</th><th>انتهاء العضوية</th><th>رقم البطاقة</th></tr></thead>
+              <tbody>
+                {me.map((m) => (
+                  <tr key={m.id}>
+                    <td>{m.policy?.provider}</td>
+                    <td>{m.policy?.planName}</td>
+                    <td>{{ self: 'نفسه', spouse: 'زوج/زوجة', child: 'ابن/ابنة' }[m.relation]}</td>
+                    <td>{fmtDate(m.policy?.endDate)}</td>
+                    <td>{m.cardNumber || '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
         {policies.map((p) => {

@@ -18,7 +18,15 @@ client.interceptors.request.use((config) => {
 client.interceptors.response.use(
   (r) => r,
   (err) => {
-    if (err.response?.status === 401 && !window.location.pathname.startsWith('/login')) {
+    const status = err.response?.status;
+    const path = window.location.pathname;
+    // Only redirect on 401 (expired session) when:
+    //  - we're not on /login already
+    //  - we actually have a user in localStorage/cookies (real session)
+    // This prevents auto-redirect on background data refreshes for routes the
+    // user is allowed to view but lacks data scope for.
+    if (status === 401 && !path.startsWith('/login') && path !== '/') {
+      // Avoid redirect on /auth/me bootstrap failure (handled by AuthContext)
       window.location.href = '/login';
     }
     return Promise.reject(err);
