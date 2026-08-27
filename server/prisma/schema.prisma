@@ -154,6 +154,7 @@ model User {
   auditLogs          AuditLog[]
   sessions           UserSession[]
   scopes             UserScope[]
+  changeRequests     ChangeRequest[]
   createdAt          DateTime       @default(now()) @map("created_at")
   updatedAt          DateTime       @updatedAt @map("updated_at")
 
@@ -266,6 +267,7 @@ model Department {
   branch    Branch?      @relation(fields: [branchId], references: [id])
   positions Position[]
   employees Employee[]
+  sections  Section[]
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")
 
@@ -329,11 +331,27 @@ model Employee {
   iban            String?
   profilePhoto    String?          @map("profile_photo")
   notes           String?
+  // ==== مواءمة الوثيقة 2: أعمدة القوائم المنسدلة الـ 21 ====
+  sectionId       Int?             @map("section_id")
+  section         Section?         @relation(fields: [sectionId], references: [id])
+  sponsorCode     String?          @map("sponsor_code")       // الكفيل (lookup: sponsor)
+  visaTypeCode    String?          @map("visa_type_code")     // نوع التأشيرة (lookup: visa_type)
+  jobCategoryCode String?          @map("job_category_code")  // الفئة الوظيفية (lookup: job_category)
+  qualificationCode String?        @map("qualification_code") // المؤهل (lookup: education_level)
+  housingAllowance   Decimal      @default(0) @db.Decimal(12, 2) @map("housing_allowance")
+  transportAllowance Decimal      @default(0) @db.Decimal(12, 2) @map("transport_allowance")
+  otherAllowances    Decimal      @default(0) @db.Decimal(12, 2) @map("other_allowances")
+  passportNumber  String?          @map("passport_number")
+  iqamaNumber     String?          @map("iqama_number")
   deletedAt       DateTime?        @map("deleted_at")
   user            User?
   history         EmployeeHistory[]
   onboardingTasks OnboardingTask[]
   exitInterview   ExitInterview?
+  contracts       Contract[]
+  transfers       Transfer[]
+  promotions      Promotion[]
+  qiwaRequests    QiwaRequest[]
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
 
@@ -1620,6 +1638,10 @@ model ProbationReview {
   notes       String?
   decision    String?   // continue, warning_pip, terminate, confirm
   reviewerId  String?   @map("reviewer_id")
+  confirmedFlag Boolean @default(false) @map("confirmed_flag") // مثبّت
+  extendedUntil DateTime? @map("extended_until")               // تأجيل التجربة حتى
+  actionType  String?   @map("action_type")                    // lookup: action_type
+  actionResult String?  @map("action_result")                  // lookup: action_result
   createdAt   DateTime  @default(now()) @map("created_at")
 
   @@unique([employeeId, milestone])
@@ -1722,4 +1744,194 @@ model SecurityEvent {
   @@index([type])
   @@index([createdAt])
   @@map("security_events")
+}
+
+// =====================================================================
+// GOVERNANCE LAYER - حوكمة القوائم والمعادلات (Maker-Checker)
+// =====================================================================
+
+// فئة قائمة مرجعية + مصفوفة الحوكمة (المالك/المعتمدون) لكل جدول فرعي من الـ 21
+model LookupCategory {
+  id               Int      @id @default(autoincrement())
+  code             String   @unique // nationality, branch, department, section, position, job_category, contract_type, sponsor, visa_type, employee_status, request_status, qualification, eos_reason, request_reason, action_type, action_result, qiwa_change_type, classification_type, request_type, entity, employees
+  nameAr           String   @map("name_ar")
+  nameEn           String?  @map("name_en")
+  source           String   @default("lookup") // lookup (جدول lookups) أو table (كيان حي: branches/departments/employees...)
+  sourceTable      String?  @map("source_table") // اسم الجدول الحي إن وُجد
+  ownerRoles       Json     @map("owner_roles") // ["hr_specialist"] — من يقترح/يعدّل
+  approverRoles    Json     @map("approver_roles") // ["hr_director","finance_manager"] — سلسلة الاعتماد بالترتيب
+  requiresApproval Boolean  @default(true) @map("requires_approval")
+  sensitive        Boolean  @default(false) // يتطلب أربع عيون (اعتمادين)
+  notes            String?
+  isActive         Boolean  @default(true) @map("is_active")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@map("lookup_categories")
+}
+
+// طلب تغيير محكوم (قائمة مرجعية / معادلة / هيكل رواتب) — يُطبَّق بعد اكتمال الاعتمادات
+model ChangeRequest {
+  id            Int       @id @default(autoincrement())
+  kind          String    // lookup, formula, salary_structure, employee
+  targetKey     String    @map("target_key") // category:code أو formula code
+  action        String    // create, update, deactivate
+  payloadJson   Json      @map("payload_json") // القيم الجديدة المقترحة
+  beforeJson    Json?     @map("before_json") // القيم الحالية قبل التغيير
+  reason        String    // إلزامي — مبدأ البصمة والتوثيق
+  proposedBy    String    @map("proposed_by")
+  proposer      User      @relation(fields: [proposedBy], references: [id])
+  approverChain Json      @map("approver_chain") // ["hr_director","finance_manager"] لقطة وقت الاقتراح
+  currentStage  Int       @default(0) @map("current_stage")
+  approvalsJson Json      @default("[]") @map("approvals_json") // [{userId, role, decision, note, at}]
+  status        String    @default("pending") // pending, approved, applied, rejected, cancelled
+  decidedNote   String?   @map("decided_note")
+  appliedAt     DateTime? @map("applied_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([kind, targetKey])
+  @@index([proposedBy])
+  @@map("change_requests")
+}
+
+// تعريف معادلة — 32 معادلة موثقة (النص العربي + الكود + المتغيرات + المثال + الحوكمة)
+model FormulaDefinition {
+  id             Int      @id @default(autoincrement())
+  code           String   @unique // F01..F32
+  category       String   // salary, service, leave, kpi
+  nameAr         String   @map("name_ar")
+  nameEn         String?  @map("name_en")
+  expressionAr   String   @map("expression_ar") // المعادلة بالعربية كما في الوثيقة
+  variablesJson  Json     @map("variables_json") // [{key, nameAr, example}]
+  exampleJson    Json?    @map("example_json") // {inputs:{}, result}
+  ownerRoles     Json     @map("owner_roles")
+  approverRoles  Json     @map("approver_roles")
+  requiresCeo    Boolean  @default(false) @map("requires_ceo") // هيكل الرواتب
+  notes          String?
+  version        Int      @default(1)
+  isActive       Boolean  @default(true) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@index([category])
+  @@map("formula_definitions")
+}
+
+// =====================================================================
+// CORE EXTENSIONS - العقود/التحويلات/الترقيات/قوى/الأقسام
+// =====================================================================
+
+// عقد عمل مستقل (T2/T9 في الوثيقة)
+model Contract {
+  id              Int       @id @default(autoincrement())
+  employeeId      String    @map("employee_id")
+  employee        Employee  @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  contractNo      String?   @map("contract_no")
+  type            String    @default("full_time") // lookup: contract_type
+  startDate       DateTime  @map("start_date")
+  endDate         DateTime? @map("end_date")
+  basicSalary     Decimal   @default(0) @db.Decimal(12, 2) @map("basic_salary")
+  housing         Decimal   @default(0) @db.Decimal(12, 2)
+  transport       Decimal   @default(0) @db.Decimal(12, 2)
+  otherAllowances Decimal   @default(0) @db.Decimal(12, 2) @map("other_allowances")
+  status          String    @default("active") // active, expired, renewed, terminated
+  qiwaNumber      String?   @map("qiwa_number")
+  renewalOfId     Int?      @map("renewal_of_id")
+  notes           String?
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([endDate])
+  @@map("contracts")
+}
+
+// قسم داخلي يتبع إدارة (الوثيقة تفصل الإدارة عن القسم)
+model Section {
+  id         Int        @id @default(autoincrement())
+  code       String     @unique
+  nameAr     String     @map("name_ar")
+  nameEn     String?    @map("name_en")
+  deptId     Int        @map("dept_id")
+  department Department @relation(fields: [deptId], references: [id])
+  employees  Employee[]
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  @@index([deptId])
+  @@map("sections")
+}
+
+// حركة تحويل موظف (T8) — قبل/بعد + سير عمل
+model Transfer {
+  id             Int      @id @default(autoincrement())
+  employeeId     String   @map("employee_id")
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  fromBranchId   Int?     @map("from_branch_id")
+  fromDeptId     Int?     @map("from_dept_id")
+  fromSectionId  Int?     @map("from_section_id")
+  fromPositionId Int?     @map("from_position_id")
+  toBranchId     Int?     @map("to_branch_id")
+  toDeptId       Int?     @map("to_dept_id")
+  toSectionId    Int?     @map("to_section_id")
+  toPositionId   Int?     @map("to_position_id")
+  transferDate   DateTime @map("transfer_date")
+  memo           String?
+  reason         String?
+  status         String   @default("pending") // pending, hr_approved, executed, rejected
+  requestedBy    String?  @map("requested_by")
+  approvedBy     String?  @map("approved_by")
+  executedAt     DateTime? @map("executed_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("transfers")
+}
+
+// حركة ترقية (T5)
+model Promotion {
+  id             Int      @id @default(autoincrement())
+  employeeId     String   @map("employee_id")
+  employee       Employee @relation(fields: [employeeId], references: [id], onDelete: Cascade)
+  fromPositionId Int?     @map("from_position_id")
+  toPositionId   Int?     @map("to_position_id")
+  fromCategory   String?  @map("from_category") // الفئة الوظيفية قبل
+  toCategory     String?  @map("to_category")
+  fromSalary     Decimal? @db.Decimal(12, 2) @map("from_salary")
+  toSalary       Decimal? @db.Decimal(12, 2) @map("to_salary")
+  effectiveDate  DateTime @map("effective_date")
+  reason         String?
+  status         String   @default("proposed") // proposed, committee_approved, approved, applied, rejected
+  proposedBy     String?  @map("proposed_by")
+  approvedBy     String?  @map("approved_by")
+  appliedAt      DateTime? @map("applied_at")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("promotions")
+}
+
+// سجل طلبات منصة قوى (T11) — محاكاة داخلية بحدود واضحة
+model QiwaRequest {
+  id          Int      @id @default(autoincrement())
+  employeeId  String?  @map("employee_id")
+  employee    Employee? @relation(fields: [employeeId], references: [id], onDelete: SetNull)
+  requestNo   String   @unique @map("request_no")
+  changeType  String   @map("change_type") // lookup: qiwa_change_type
+  status      String   @default("draft") // draft, raised, in_progress, completed, rejected
+  payloadJson Json?    @map("payload_json")
+  responseJson Json?   @map("response_json")
+  raisedBy    String?  @map("raised_by")
+  raisedAt    DateTime? @map("raised_at")
+  completedAt DateTime? @map("completed_at")
+  notes       String?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@index([changeType])
+  @@map("qiwa_requests")
 }

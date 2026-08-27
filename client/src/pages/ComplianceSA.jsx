@@ -143,7 +143,7 @@ export default function ComplianceSA() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
             {pdpl.principles.map((p) => (
               <div key={p.code} className="flex items-center gap-2 p-2 rounded border border-ink-100">
-                <span className="badge-success">✓</span>
+                <span className="badge-success text-xs">موافق</span>
                 <span className="text-sm">{p.nameAr}</span>
               </div>
             ))}

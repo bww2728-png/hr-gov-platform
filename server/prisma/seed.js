@@ -267,6 +267,7 @@ async function main() {
     { username: 'admin',      role: 'sysadmin',          nameAr: 'مدير النظام',           nameEn: 'System Admin' },
     { username: 'executive',  role: 'ceo',               nameAr: 'سارة التنفيذي',         nameEn: 'Sara CEO' },
     { username: 'hrdir',      role: 'hr_director',       nameAr: 'عبدالرحمن السديري',     nameEn: 'Abdulrahman HR Director' },
+    { username: 'finance',    role: 'finance_manager',   nameAr: 'منيرة القحطاني',        nameEn: 'Munira Finance Manager' },
     { username: 'hrmgr',      role: 'hr_specialist',     nameAr: 'فاطمة الحربي',          nameEn: 'Fatima Al-Harbi' },
     { username: 'recruiter',  role: 'recruiter',         nameAr: 'خالد العتيبي',          nameEn: 'Khalid Al-Otaibi' },
     { username: 'payroll',    role: 'payroll_officer',   nameAr: 'سلطان المطيري',         nameEn: 'Sultan Payroll' },
@@ -912,12 +913,18 @@ async function main() {
   await seedNewEngines({ prisma, users, employees, positions, roles, daysAgo, daysAhead, hi });
 
   // ============================================================
+  // طبقة الحوكمة والمواءمة (الوثائق الثلاث): 21 فئة + 32 معادلة + عقود/أقسام/قوى + هوية الناضج
+  // ============================================================
+  const { seedGovernance } = require('./seed-governance');
+  await seedGovernance({ prisma, users, employees, positions, departments: depts });
+
+  // ============================================================
   // SETTINGS
   // ============================================================
-  await prisma.setting.create({ data: { key: 'org.name_ar', value: 'مؤسسة نموذجية' } });
-  await prisma.setting.create({ data: { key: 'org.name_en', value: 'Model Organization' } });
-  await prisma.setting.create({ data: { key: 'org.vision_ar', value: 'أن نكون المؤسسة الرائدة في حوكمة الموارد البشرية' } });
-  await prisma.setting.create({ data: { key: 'system.default_language', value: 'ar' } });
+  await prisma.setting.upsert({ where: { key: 'org.name_ar' }, update: { value: 'شركة الناضج' }, create: { data: { key: 'org.name_ar', value: 'شركة الناضج' } } });
+  await prisma.setting.upsert({ where: { key: 'org.name_en' }, update: { value: 'Alnadij Company' }, create: { data: { key: 'org.name_en', value: 'Alnadij Company' } } });
+  await prisma.setting.upsert({ where: { key: 'org.vision_ar' }, update: { value: 'أن نكون الشركة الرائدة في حوكمة الموارد البشرية بالمملكة' }, create: { data: { key: 'org.vision_ar', value: 'أن نكون الشركة الرائدة في حوكمة الموارد البشرية بالمملكة' } } });
+  await prisma.setting.upsert({ where: { key: 'system.default_language' }, update: { value: 'ar' }, create: { data: { key: 'system.default_language', value: 'ar' } } });
 
   // ============================================================
   // AUDIT LOG: a few initial entries
@@ -987,6 +994,14 @@ async function main() {
     requestTypes: await prisma.requestType.count(),
     employeeRequests: await prisma.employeeRequest.count(),
     flowcharts: await prisma.knowledgeDocument.count({ where: { category: 'flowchart' } }),
+    lookupCategories: await prisma.lookupCategory.count(),
+    formulaDefinitions: await prisma.formulaDefinition.count(),
+    changeRequests: await prisma.changeRequest.count(),
+    contracts: await prisma.contract.count(),
+    sections: await prisma.section.count(),
+    transfers: await prisma.transfer.count(),
+    promotions: await prisma.promotion.count(),
+    qiwaRequests: await prisma.qiwaRequest.count(),
   };
   console.table(counts);
   console.log('\n[seed] Done.');

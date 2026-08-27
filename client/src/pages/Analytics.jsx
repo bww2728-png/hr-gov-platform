@@ -80,7 +80,7 @@ export default function Analytics() {
                     <div className={`h-2 rounded-full ${ok ? 'bg-success-500' : 'bg-warn-500'}`} style={{ width: `${pct}%` }} />
                   </div>
                   <div className="mt-2 flex items-center justify-between">
-                    <span className={`text-xs ${ok ? 'text-success-600' : 'text-warn-600'}`}>{ok ? '✓ محقق' : `فجوة: ${k.gapAuto?.toFixed(1)}`}</span>
+                    <span className={`text-xs ${ok ? 'text-success-600' : 'text-warn-600'}`}>{ok ? 'محقق' : `فجوة: ${k.gapAuto?.toFixed(1)}`}</span>
                     <button onClick={() => { const v = prompt('القيمة الحالية:', k.currentValue); if (v !== null) measure(k.id, v); }} className="text-xs text-primary-600 hover:underline">قياس</button>
                   </div>
                 </div>

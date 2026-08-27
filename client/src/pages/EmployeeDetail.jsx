@@ -69,7 +69,7 @@ export default function EmployeeDetail() {
                 <div className="col-span-2"><dt className="muted">IBAN</dt><dd className="font-mono text-xs">{emp.iban || '—'}</dd></div>
               </>
             )}
-            {!canSeeSalary && <div className="col-span-2 text-ink-500 text-xs">🔒 الراتب والبيانات البنكية محجوبة بصلاحية</div>}
+            {!canSeeSalary && <div className="col-span-2 text-ink-500 text-xs">الراتب والبيانات البنكية محجوبة بصلاحية</div>}
           </dl>
         </div>
       </div>

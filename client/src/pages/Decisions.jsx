@@ -35,7 +35,7 @@ export default function Decisions() {
         <div className="flex gap-2">
           {verify && (
             <div className={`px-3 py-2 rounded-lg text-sm ${verify.intact ? 'bg-green-50 text-success-600' : 'bg-red-50 text-danger-600'}`}>
-              {verify.intact ? '✓ السلسلة سليمة' : '✗ السلسلة مكسورة'} ({verify.total} قرار)
+              {verify.intact ? 'السلسلة سليمة' : 'السلسلة مكسورة'} ({verify.total} قرار)
             </div>
           )}
           <button onClick={() => setShowNew((s) => !s)} className="btn-primary">+ قرار جديد</button>

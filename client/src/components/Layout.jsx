@@ -1,98 +1,104 @@
 import React, { useState, useEffect } from 'react';
 import { Link, NavLink, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { setLang, getLang } from '../i18n';
+import { setLang, getLang, t } from '../i18n';
 
 const NAV_SECTIONS = [
   {
     section: 'الرئيسية',
     items: [
-      { to: '/', label: 'لوحة القيادة', icon: '📊', perm: 'analytics.read' },
-      { to: '/my-hub', label: 'بوابتي', icon: '🏠', perm: 'self.profile.read' },
+      { to: '/', label: 'لوحة القيادة', perm: 'analytics.read' },
+      { to: '/my-hub', label: 'بوابتي', perm: 'self.profile.read' },
     ],
   },
   {
     section: 'الموظفون والهيكل',
     items: [
-      { to: '/employees', label: 'الموظفون', icon: '👥', perm: 'hr.employee.read' },
-      { to: '/employees/new', label: 'إضافة موظف', icon: '➕', perm: 'hr.employee.write' },
-      { to: '/org-chart', label: 'الهيكل التنظيمي', icon: '🏛', perm: 'hr.org.read' },
+      { to: '/employees', label: 'الموظفون', perm: 'hr.employee.read' },
+      { to: '/employees/new', label: 'إضافة موظف', perm: 'hr.employee.write' },
+      { to: '/org-chart', label: 'الهيكل التنظيمي', perm: 'hr.org.read' },
     ],
   },
   {
     section: 'الاستقطاب',
     items: [
-      { to: '/recruitment', label: 'الوظائف', icon: '🎯', perm: 'lifecycle.posting.read' },
-      { to: '/candidates', label: 'المرشحون', icon: '📋', perm: 'lifecycle.candidate.read' },
+      { to: '/recruitment', label: 'الوظائف', perm: 'lifecycle.posting.read' },
+      { to: '/candidates', label: 'المرشحون', perm: 'lifecycle.candidate.read' },
     ],
   },
   {
     section: 'الخدمة الذاتية والطلبات',
     items: [
-      { to: '/requests', label: 'مركز الطلبات', icon: '📨', perm: 'requests.create' },
-      { to: '/leaves', label: 'الإجازات', icon: '🌴', perm: 'self.leave.read' },
-      { to: '/attendance', label: 'الحضور', icon: '🕐', perm: 'self.attendance.read' },
-      { to: '/payroll', label: 'الرواتب', icon: '💰', perm: 'payroll.read' },
+      { to: '/requests', label: 'مركز الطلبات', perm: 'requests.create' },
+      { to: '/leaves', label: 'الإجازات', perm: 'self.leave.read' },
+      { to: '/attendance', label: 'الحضور', perm: 'self.attendance.read' },
+      { to: '/payroll', label: 'الرواتب', perm: 'payroll.read' },
     ],
   },
   {
     section: 'شؤون المقيمين',
     items: [
-      { to: '/expat', label: 'الإقامات والتأشيرات', icon: '🛂', perm: 'expat.iqama.read' },
-      { to: '/insurance', label: 'التأمين الصحي', icon: '🏥', perm: 'insurance.read' },
+      { to: '/expat', label: 'الإقامات والتأشيرات', perm: 'expat.iqama.read' },
+      { to: '/insurance', label: 'التأمين الصحي', perm: 'insurance.read' },
     ],
   },
   {
     section: 'الأداء والتطوير',
     items: [
-      { to: '/performance', label: 'الأداء', icon: '🎯', perm: 'self.profile.read' },
-      { to: '/learning', label: 'التعلم والتطوير', icon: '🎓', perm: 'lnd.catalog.read' },
-      { to: '/talent', label: 'المواهب والتعاقب', icon: '⭐', perm: 'succession.read' },
-      { to: '/retention', label: 'الاحتفاظ', icon: '💎', perm: 'surveys.respond' },
+      { to: '/performance', label: 'الأداء', perm: 'self.profile.read' },
+      { to: '/learning', label: 'التعلم والتطوير', perm: 'lnd.catalog.read' },
+      { to: '/talent', label: 'المواهب والتعاقب', perm: 'succession.read' },
+      { to: '/retention', label: 'الاحتفاظ', perm: 'surveys.respond' },
     ],
   },
   {
     section: 'العلاقات العمالية',
     items: [
-      { to: '/relations', label: 'تأديب وتظلمات', icon: '⚖', perm: 'grievances.create' },
+      { to: '/relations', label: 'تأديب وتظلمات', perm: 'grievances.create' },
     ],
   },
   {
     section: 'المعرفة',
     items: [
-      { to: '/knowledge', label: 'الوثائق', icon: '📚', perm: 'knowledge.doc.read' },
-      { to: '/flowcharts', label: 'مرجع المعاملات', icon: '🗺', perm: 'knowledge.doc.read' },
-      { to: '/decisions', label: 'سجل القرارات', icon: '⚖', perm: 'knowledge.decision.read' },
-      { to: '/policies', label: 'السياسات', icon: '📜', perm: 'knowledge.policy.read' },
+      { to: '/knowledge', label: 'الوثائق', perm: 'knowledge.doc.read' },
+      { to: '/flowcharts', label: 'مرجع المعاملات', perm: 'knowledge.doc.read' },
+      { to: '/decisions', label: 'سجل القرارات', perm: 'knowledge.decision.read' },
+      { to: '/policies', label: 'السياسات', perm: 'knowledge.policy.read' },
     ],
   },
   {
     section: 'الحوكمة والامتثال',
     items: [
-      { to: '/workflows', label: 'سير العمل', icon: '🔄', perm: 'workflow.instance.read' },
-      { to: '/compliance', label: 'الامتثال العام', icon: '🛡', perm: 'compliance.rule.read' },
-      { to: '/compliance-sa', label: 'الامتثال السعودي', icon: '🇸🇦', perm: 'nitaqat.read' },
-      { to: '/maturity', label: 'قياس النضج', icon: '📈', perm: 'maturity.read' },
-      { to: '/roadmap', label: 'خارطة الطريق', icon: '🗺', perm: 'roadmap.read' },
-      { to: '/risks', label: 'المخاطر', icon: '⚠', perm: 'risk.read' },
-      { to: '/fivewhys', label: '5 Whys', icon: '🔍', perm: 'fivewhys.read' },
+      { to: '/transparency', label: 'الشفافية', perm: 'self.profile.read' },
+      { to: '/lookup-admin', label: 'إدارة القوائم', perm: 'admin.lookup.write' },
+      { to: '/formulas', label: 'مركز المعادلات', perm: 'formulas.read' },
+      { to: '/approvals', label: 'صندوق الموافقات', perm: 'governance.approve' },
+      { to: '/reports', label: 'مركز التقارير', perm: 'reports.hr.read' },
+      { to: '/qiwa', label: 'منصة قوى', perm: 'qiwa.read' },
+      { to: '/workflows', label: 'سير العمل', perm: 'workflow.instance.read' },
+      { to: '/compliance', label: 'الامتثال العام', perm: 'compliance.rule.read' },
+      { to: '/compliance-sa', label: 'الامتثال السعودي', perm: 'nitaqat.read' },
+      { to: '/maturity', label: 'قياس النضج', perm: 'maturity.read' },
+      { to: '/roadmap', label: 'خارطة الطريق', perm: 'roadmap.read' },
+      { to: '/risks', label: 'المخاطر', perm: 'risk.read' },
+      { to: '/fivewhys', label: '5 Whys', perm: 'fivewhys.read' },
     ],
   },
   {
     section: 'التحليلات',
     items: [
-      { to: '/analytics', label: 'التحليلات', icon: '📊', perm: 'analytics.read' },
+      { to: '/analytics', label: 'التحليلات', perm: 'analytics.read' },
     ],
   },
   {
     section: 'إدارة النظام',
     items: [
-      { to: '/users', label: 'المستخدمون', icon: '🔐', perm: 'admin.user.read' },
-      { to: '/roles', label: 'الأدوار والصلاحيات', icon: '🗝', perm: 'admin.role.read' },
-      { to: '/security', label: 'الأمن والجلسات', icon: '🛡', perm: 'security.events.read' },
-      { to: '/integrations', label: 'التكاملات', icon: '🔌', perm: 'admin.integration.read' },
-      { to: '/audit', label: 'سجل التدقيق', icon: '📜', perm: 'admin.audit.read' },
-      { to: '/settings', label: 'الإعدادات', icon: '⚙', perm: 'self.profile.read' },
+      { to: '/users', label: 'المستخدمون', perm: 'admin.user.read' },
+      { to: '/roles', label: 'الأدوار والصلاحيات', perm: 'admin.role.read' },
+      { to: '/security', label: 'الأمن والجلسات', perm: 'security.events.read' },
+      { to: '/integrations', label: 'التكاملات', perm: 'admin.integration.read' },
+      { to: '/audit', label: 'سجل التدقيق', perm: 'admin.audit.read' },
+      { to: '/settings', label: 'الإعدادات', perm: 'self.profile.read' },
     ],
   },
 ];
@@ -128,11 +134,11 @@ export default function Layout({ children }) {
     <div className="h-full flex bg-ink-50">
       <aside className={`${sidebarOpen ? 'w-64' : 'w-16'} shrink-0 bg-white border-e border-ink-100 transition-all flex flex-col`}>
         <div className="p-4 border-b border-ink-100 flex items-center gap-2">
-          <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white font-bold">ح</div>
+          <div className="w-8 h-8 rounded-lg bg-primary-600 flex items-center justify-center text-white font-bold text-xs">ناضج</div>
           {sidebarOpen && (
             <div className="leading-tight">
-              <div className="font-bold text-ink-900">حوكمة HR</div>
-              <div className="text-xs text-ink-500">منصة مؤسسية</div>
+              <div className="font-bold text-ink-900">{t('app.company')}</div>
+              <div className="text-xs text-ink-500">{t('app.subtitle')}</div>
             </div>
           )}
         </div>
@@ -149,7 +155,6 @@ export default function Layout({ children }) {
                     `flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition ${isActive ? 'bg-primary-50 text-primary-700 font-medium' : 'text-ink-700 hover:bg-ink-50'}`
                   }
                 >
-                  <span className="text-base">{it.icon}</span>
                   {sidebarOpen && <span>{it.label}</span>}
                 </NavLink>
               ))}
@@ -167,7 +172,7 @@ export default function Layout({ children }) {
       <div className="flex-1 flex flex-col overflow-hidden">
         <header className="h-14 bg-white border-b border-ink-100 px-4 flex items-center justify-between shrink-0">
           <div className="font-semibold text-ink-700">
-            {lang === 'ar' ? 'منصة حوكمة الموارد البشرية والتحول المؤسسي' : 'HR Governance Platform'}
+            {t('app.title')}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -208,6 +213,9 @@ export default function Layout({ children }) {
         </header>
 
         <main className="flex-1 overflow-y-auto">{children}</main>
+        <footer className="h-10 bg-white border-t border-ink-100 px-4 flex items-center justify-center text-xs text-ink-500 shrink-0">
+          {t('app.copyright')}
+        </footer>
       </div>
     </div>
   );

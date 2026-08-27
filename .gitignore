@@ -32,3 +32,7 @@ client/src/hooks/useSocket.js
 
 # Verdent internal
 .verdent/
+
+# Misc local artefacts
+cj.txt
+deploy.bat

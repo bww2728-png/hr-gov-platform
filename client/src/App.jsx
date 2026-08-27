@@ -44,6 +44,12 @@ import Requests from './pages/Requests';
 import Flowcharts from './pages/Flowcharts';
 import ComplianceSA from './pages/ComplianceSA';
 import Security from './pages/Security';
+import Transparency from './pages/Transparency';
+import LookupAdmin from './pages/LookupAdmin';
+import FormulaCenter from './pages/FormulaCenter';
+import ApprovalsInbox from './pages/ApprovalsInbox';
+import ReportsCenter from './pages/ReportsCenter';
+import Qiwa from './pages/Qiwa';
 
 setLang(localStorage.getItem('hr_lang') || 'ar');
 
@@ -104,6 +110,12 @@ function AppRoutes() {
                 <Route path="/audit" element={<Audit />} />
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/profile" element={<MyHub />} />
+                <Route path="/transparency" element={<Transparency />} />
+                <Route path="/lookup-admin" element={<LookupAdmin />} />
+                <Route path="/formulas" element={<FormulaCenter />} />
+                <Route path="/approvals" element={<ApprovalsInbox />} />
+                <Route path="/reports" element={<ReportsCenter />} />
+                <Route path="/qiwa" element={<Qiwa />} />
                 <Route path="*" element={<div className="page"><h1>404</h1><p>الصفحة غير موجودة</p></div>} />
               </Routes>
             </Layout>

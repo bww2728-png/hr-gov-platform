@@ -29,6 +29,10 @@ const insuranceRoutes = require('./routes/insurance.routes');
 const complianceSaRoutes = require('./routes/complianceSa.routes');
 const requestsRoutes = require('./routes/requests.routes');
 const govDocsRoutes = require('./routes/govDocs.routes');
+const governanceRoutes = require('./routes/governance.routes');
+const formulasRoutes = require('./routes/formulas.routes');
+const reportsRoutes = require('./routes/reports.routes');
+const qiwaRoutes = require('./routes/qiwa.routes');
 
 function createApp() {
   const app = express();
@@ -91,6 +95,10 @@ function createApp() {
   app.use('/api/compliance-sa', complianceSaRoutes);
   app.use('/api/requests', requestsRoutes);
   app.use('/api/gov-docs', govDocsRoutes);
+  app.use('/api/governance', governanceRoutes);
+  app.use('/api/formulas', formulasRoutes);
+  app.use('/api/reports', reportsRoutes);
+  app.use('/api/qiwa', qiwaRoutes);
 
   const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
   app.use(express.static(clientDist));

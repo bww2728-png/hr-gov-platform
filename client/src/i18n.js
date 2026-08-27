@@ -3,8 +3,10 @@
  */
 const dict = {
   ar: {
-    'app.title': 'منصة حوكمة الموارد البشرية',
-    'app.subtitle': 'نظام حوكمة وتحويل مؤسسي',
+    'app.title': 'منصة الناضج لإدارة الموارد البشرية',
+    'app.subtitle': 'منظومة الحوكمة والتحول المؤسسي',
+    'app.company': 'شركة الناضج',
+    'app.copyright': '© الناضج 2026 — جميع الحقوق محفوظة',
     'common.search': 'بحث...',
     'common.save': 'حفظ',
     'common.cancel': 'إلغاء',
@@ -83,8 +85,10 @@ const dict = {
     'employee.notes': 'ملاحظات',
   },
   en: {
-    'app.title': 'HR Governance Platform',
-    'app.subtitle': 'Institutional governance & transformation system',
+    'app.title': 'Al-Nadij HR Governance Platform',
+    'app.subtitle': 'Enterprise governance & institutional transformation',
+    'app.company': 'Al-Nadij Co.',
+    'app.copyright': '© Al-Nadij 2026 — All rights reserved',
     'common.search': 'Search...',
     'common.save': 'Save',
     'common.cancel': 'Cancel',

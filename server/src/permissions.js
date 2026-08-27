@@ -1,6 +1,6 @@
 /**
- * Permission catalog - 13 roles, ~150 permissions.
- * Based on spec: انواع المستخدمين وصلاحياتهم (13 roles).
+ * Permission catalog - 14 roles, ~170 permissions.
+ * Based on spec: انواع المستخدمين وصلاحياتهم + مصفوفة الحوكمة (الوثائق الثلاث).
  */
 
 const ROLES = [
@@ -11,6 +11,7 @@ const ROLES = [
   { code: 'payroll_officer',    nameAr: 'مسؤول رواتب',           nameEn: 'Payroll Officer' },
   { code: 'ld_specialist',      nameAr: 'مسؤول تعلم وتطوير',     nameEn: 'L&D Specialist' },
   { code: 'hr_director',        nameAr: 'مدير الموارد البشرية',  nameEn: 'HR Director' },
+  { code: 'finance_manager',    nameAr: 'المدير المالي',          nameEn: 'Finance Manager' },
   { code: 'ceo',                nameAr: 'المدير التنفيذي',        nameEn: 'CEO / Executive' },
   { code: 'auditor',            nameAr: 'مراقب داخلي',           nameEn: 'Auditor' },
   { code: 'sysadmin',           nameAr: 'مسؤول النظام',          nameEn: 'System Administrator' },
@@ -34,6 +35,8 @@ const ROLE_PERMS = {
     'lnd.catalog.read', 'lnd.enroll.self',
     'surveys.respond',
     'grievances.create', 'grievances.read.self',
+    // شفافية المعادلات — الموظف يقرأ كيف تُحسب مستحقاته
+    'formulas.read',
   ],
 
   // ============ 2. المدير المباشر (كل صلاحيات الموظف +) ============
@@ -78,6 +81,10 @@ const ROLE_PERMS = {
     // سياسات
     'knowledge.policy.write',
     'requests.read.all', 'requests.process',
+    // الحوكمة — أخصائي HR مالك معظم الجداول الفرعية (يقترح)
+    'governance.read', 'governance.propose',
+    'formulas.read', 'formulas.propose',
+    'qiwa.read', 'qiwa.write',
   ],
 
   // ============ 4. مسؤول التوظيف ============
@@ -113,6 +120,9 @@ const ROLE_PERMS = {
     'gosi.read',
     'reports.payroll.read',
     'banks.reconcile',
+    // الحوكمة — محاسب الرواتب مالك معادلات الرواتب (يقترح)
+    'governance.read', 'governance.propose',
+    'formulas.read', 'formulas.propose',
   ],
 
   // ============ 6. مسؤول التعلم ============
@@ -168,9 +178,37 @@ const ROLE_PERMS = {
     'stay_interview.read', 'stay_interview.write',
     'talent.hipo.read', 'talent.hipo.write',
     'retention.read', 'analytics.read',
+    // الحوكمة — مدير HR معتمد رئيسي للجداول الفرعية والمعادلات
+    'governance.read', 'governance.propose', 'governance.approve',
+    'formulas.read', 'formulas.propose', 'formulas.approve',
+    'qiwa.read', 'qiwa.write',
   ],
 
-  // ============ 8. المدير التنفيذي (كل صلاحيات مدير HR +) ============
+  // ============ 8. المدير المالي ============
+  finance_manager: [
+    'self.profile.read', 'self.profile.write', 'surveys.respond',
+    'knowledge.doc.read', 'knowledge.policy.read',
+    // قراءة مالية شاملة
+    'hr.employee.read', 'hr.employee.read.salary', 'hr.org.read', 'hr.position.read',
+    'leaves.read', 'attendance.read', 'overtime.read',
+    // الرواتب والمستحقات — الاعتماد المالي
+    'payroll.read', 'payroll.review', 'payroll.approve', 'payroll.payslips.read',
+    'loans.read', 'loans.approve',
+    'bonuses.read', 'bonuses.approve',
+    'eos.read', 'eos.calculate',
+    'wps.read', 'gosi.read', 'insurance.read',
+    'banks.reconcile',
+    // الميزانية
+    'budget.manage', 'budget.approve',
+    // التقارير والتحليلات المالية
+    'reports.payroll.read', 'reports.hr.read', 'analytics.read',
+    // الحوكمة — اعتماد المعادلات المالية والقوائم المرتبطة بالرواتب
+    'governance.read', 'governance.approve',
+    'formulas.read', 'formulas.approve',
+    'qiwa.read',
+  ],
+
+  // ============ 9. المدير التنفيذي (كل صلاحيات مدير HR +) ============
   ceo: [
     'self.profile.read', 'self.profile.write', 'surveys.respond',
     // قراءة شاملة
@@ -193,6 +231,10 @@ const ROLE_PERMS = {
     'saudization.approve', 'exceptions.approve', 'contracts.strategic.approve',
     'hiring.approve', 'termination.approve', 'promotion.approve', 'bonus.approve',
     'payroll.approve',
+    // الحوكمة — CEO يعتمد هيكل الرواتب والتغييرات الاستراتيجية
+    'governance.read', 'governance.approve',
+    'formulas.read', 'formulas.approve',
+    'qiwa.read',
   ],
 
   // ============ 9. المراقب الداخلي (قراءة فقط لكل شيء) ============
@@ -218,6 +260,8 @@ const ROLE_PERMS = {
     'analytics.read', 'reports.hr.read', 'reports.payroll.read', 'reports.recruitment.read', 'reports.lnd.read',
     'admin.audit.read', 'admin.user.read', 'admin.lookup.read',
     'security.events.read',
+    // الحوكمة — المراقب يقرأ كل شيء
+    'governance.read', 'formulas.read', 'qiwa.read',
   ],
 
   // ============ 10. مسؤول النظام 👑 ============
@@ -246,6 +290,7 @@ const ROLE_PERMS = {
     'lnd.catalog.read', 'surveys.read', 'retention.read',
     'maturity.read', 'opex.kpi.read', 'risk.read', 'roadmap.read',
     'reports.hr.read', 'reports.payroll.read', 'reports.recruitment.read', 'reports.lnd.read',
+    'formulas.read',
   ],
 
   // ============ 13. مسؤول الامتثال ============
@@ -262,6 +307,9 @@ const ROLE_PERMS = {
     'hr.employee.read',
     'maturity.read',
     'reports.hr.read',
+    // الحوكمة — مسؤول الامتثال يؤدي دور Legal في الاعتمادات القانونية
+    'governance.read', 'governance.approve',
+    'formulas.read', 'qiwa.read',
   ],
 };
 
@@ -450,6 +498,26 @@ const PERMISSIONS = {
       'settings.write': 'الإعدادات العامة', 'maintenance.run': 'تنفيذ الصيانة',
       'workflow.simulate': 'محاكاة سير العمل', 'secrets.manage': 'إدارة الأسرار',
     },
+  },
+  governance: {
+    nameAr: 'حوكمة القوائم والتغييرات', nameEn: 'Governance',
+    actions: {
+      'read': 'قراءة طلبات التغيير والسجل',
+      'propose': 'اقتراح تغيير على القوائم/المعادلات',
+      'approve': 'اعتماد طلبات التغيير',
+    },
+  },
+  formulas: {
+    nameAr: 'مركز المعادلات', nameEn: 'Formulas Center',
+    actions: {
+      'read': 'قراءة المعادلات ومحاكاتها (شفافية)',
+      'propose': 'اقتراح تعديل معادلة',
+      'approve': 'اعتماد تعديل معادلة',
+    },
+  },
+  qiwa: {
+    nameAr: 'منصة قوى', nameEn: 'Qiwa',
+    actions: { 'read': 'قراءة طلبات قوى', 'write': 'رفع ومعالجة طلبات قوى' },
   },
 };
 

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { errMsg } from '../api/client';
-import { setLang, getLang } from '../i18n';
+import { setLang, getLang, t } from '../i18n';
 
 export default function Login() {
   const { login } = useAuth();
@@ -36,9 +36,10 @@ export default function Login() {
     <div className="h-full flex items-center justify-center bg-gradient-to-br from-primary-50 via-white to-accent-50 p-4">
       <div className="w-full max-w-md">
         <div className="text-center mb-6">
-          <div className="inline-flex w-16 h-16 rounded-2xl bg-primary-600 text-white items-center justify-center text-3xl font-bold mb-3">ح</div>
-          <h1 className="h1">منصة حوكمة الموارد البشرية</h1>
-          <p className="muted">نظام حوكمة وتحول مؤسسي متكامل</p>
+          <div className="inline-flex w-16 h-16 rounded-2xl bg-primary-600 text-white items-center justify-center text-2xl font-bold mb-3">ناضج</div>
+          <h1 className="h1">{t('app.title')}</h1>
+          <p className="muted">{t('app.subtitle')}</p>
+          <p className="text-xs text-ink-400 mt-1">{t('app.copyright')}</p>
         </div>
         <div className="card-padded shadow-pop">
           <div className="flex justify-between items-center mb-4">

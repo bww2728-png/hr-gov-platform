@@ -44,7 +44,7 @@ export default function Dashboard() {
     <div className="page space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div>
-          <h1 className="h1">أهلاً، {user?.fullNameAr} 👋</h1>
+          <h1 className="h1">أهلاً، {user?.fullNameAr}</h1>
           <p className="muted">لوحة القيادة التنفيذية - {fmtDate(new Date())}</p>
         </div>
         <span className="badge-primary text-base px-3 py-1">{user?.role?.nameAr}</span>
@@ -75,15 +75,14 @@ export default function Dashboard() {
           <h3 className="h3 mb-3">وصول سريع</h3>
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
             {[
-              { to: '/employees', label: 'الموظفون', icon: '👥' },
-              { to: '/recruitment', label: 'الاستقطاب', icon: '🎯' },
-              { to: '/maturity', label: 'النضج', icon: '📈' },
-              { to: '/risks', label: 'المخاطر', icon: '⚠' },
-              { to: '/compliance', label: 'الامتثال', icon: '🛡' },
-              { to: '/workflows', label: 'سير العمل', icon: '🔄' },
+              { to: '/employees', label: 'الموظفون' },
+              { to: '/recruitment', label: 'الاستقطاب' },
+              { to: '/maturity', label: 'النضج' },
+              { to: '/risks', label: 'المخاطر' },
+              { to: '/compliance', label: 'الامتثال' },
+              { to: '/workflows', label: 'سير العمل' },
             ].map((q) => (
               <Link key={q.to} to={q.to} className="flex items-center gap-2 p-3 rounded-lg border border-ink-100 hover:bg-ink-50">
-                <span className="text-xl">{q.icon}</span>
                 <span className="text-sm font-medium">{q.label}</span>
               </Link>
             ))}
@@ -92,12 +91,12 @@ export default function Dashboard() {
         <div className="card-padded">
           <h3 className="h3 mb-3">مبادئ المنصة</h3>
           <ul className="space-y-2 text-sm text-ink-700">
-            <li className="flex gap-2"><span>✅</span><span>8 محركات مستقلة قابلة للتطوير والاستبدال</span></li>
-            <li className="flex gap-2"><span>✅</span><span>42 بعد نضج عبر 7 محاور</span></li>
-            <li className="flex gap-2"><span>✅</span><span>52 أسبوع خارطة طريق قابلة للقياس</span></li>
-            <li className="flex gap-2"><span>✅</span><span>سجل قرارات بـ hash chain غير قابل للتعديل</span></li>
-            <li className="flex gap-2"><span>✅</span><span>RBAC كامل + سجل تدقيق لكل عملية</span></li>
-            <li className="flex gap-2"><span>✅</span><span>إدخال ذكي: قوائم + تواريخ هجرية + مدد</span></li>
+            <li className="flex gap-2"><span className="text-primary-600">●</span><span>8 محركات مستقلة قابلة للتطوير والاستبدال</span></li>
+            <li className="flex gap-2"><span className="text-primary-600">●</span><span>42 بعد نضج عبر 7 محاور</span></li>
+            <li className="flex gap-2"><span className="text-primary-600">●</span><span>52 أسبوع خارطة طريق قابلة للقياس</span></li>
+            <li className="flex gap-2"><span className="text-primary-600">●</span><span>سجل قرارات بـ hash chain غير قابل للتعديل</span></li>
+            <li className="flex gap-2"><span className="text-primary-600">●</span><span>RBAC كامل + سجل تدقيق لكل عملية</span></li>
+            <li className="flex gap-2"><span className="text-primary-600">●</span><span>إدخال ذكي: قوائم + تواريخ هجرية + مدد</span></li>
           </ul>
         </div>
       </div>
