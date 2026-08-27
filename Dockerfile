@@ -1,10 +1,11 @@
 # ---------- Stage 1: build the frontend ----------
 FROM node:20-slim AS client-build
+ARG CACHEBUST=1
 WORKDIR /app/client
 COPY client/package.json client/package-lock.json* ./
 RUN npm install --no-audit --no-fund
 COPY client/ ./
-RUN npm run build
+RUN echo "build-${CACHEBUST}" && npm run build
 
 # ---------- Stage 2: server runtime ----------
 FROM node:20-slim AS server
