@@ -70,7 +70,7 @@ async function main() {
     'application', 'candidate', 'jobPosting',
     'employeeHistory', 'employee', 'position', 'department',
     'section', 'transfer', 'promotion', 'qiwaRequest',
-    'formulaDefinition', 'formulaAuditLog', 'governanceChangeRequest', 'governanceAuditLog',
+    'formulaDefinition', 'changeRequest',
     'lookupCategory',
     'branch', 'region',
     'policy', 'decisionRecord', 'knowledgeDocument',
