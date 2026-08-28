@@ -79,8 +79,9 @@ async function main() {
   ];
   for (const t of tables) {
     try { await prisma[t].deleteMany({}); }
-    catch (e) { /* table may not exist yet */ }
+    catch (e) { console.log('  skip', t, '(table not in client yet)'); }
   }
+  console.log('[seed] wipe done');
 
   // ============================================================
   // ROLES — 13 role من src/permissions.js
@@ -185,7 +186,11 @@ async function main() {
     { code: 'EASTERN', nameAr: 'المنطقة الشرقية', nameEn: 'Eastern Region', countryCode: 'SA' },
   ];
   const regions = {};
-  for (const r of REGIONS) regions[r.code] = await prisma.region.create({ data: r });
+  for (const r of REGIONS) regions[r.code] = await prisma.region.upsert({
+    where: { code: r.code },
+    update: { nameAr: r.nameAr, nameEn: r.nameEn, countryCode: r.countryCode },
+    create: r,
+  });
 
   const BRANCHES = [
     { code: 'HQ-RYD',  nameAr: 'المقر الرئيسي - الرياض',   nameEn: 'HQ Riyadh',      regionCode: 'CENTRAL' },
