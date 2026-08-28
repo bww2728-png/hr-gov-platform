@@ -199,8 +199,10 @@ async function main() {
   ];
   const branches = {};
   for (const b of BRANCHES) {
-    branches[b.code] = await prisma.branch.create({
-      data: { code: b.code, nameAr: b.nameAr, nameEn: b.nameEn, regionId: regions[b.regionCode].id },
+    branches[b.code] = await prisma.branch.upsert({
+      where: { code: b.code },
+      update: { nameAr: b.nameAr, nameEn: b.nameEn, regionId: regions[b.regionCode].id },
+      create: { code: b.code, nameAr: b.nameAr, nameEn: b.nameEn, regionId: regions[b.regionCode].id },
     });
   }
 
@@ -219,7 +221,11 @@ async function main() {
     { code: 'PRCH', nameAr: 'المشتريات',          nameEn: 'Procurement' },
   ];
   const depts = {};
-  for (const d of DEPTS) depts[d.code] = await prisma.department.create({ data: d });
+  for (const d of DEPTS) depts[d.code] = await prisma.department.upsert({
+    where: { code: d.code },
+    update: { nameAr: d.nameAr, nameEn: d.nameEn },
+    create: { code: d.code, nameAr: d.nameAr, nameEn: d.nameEn },
+  });
 
   const POSITIONS = [
     { code: 'CEO',        titleAr: 'الرئيس التنفيذي',     titleEn: 'Chief Executive Officer', deptCode: 'EXEC', level: 9 },
@@ -250,8 +256,14 @@ async function main() {
   ];
   const positions = {};
   for (const p of POSITIONS) {
-    positions[p.code] = await prisma.position.create({
-      data: {
+    positions[p.code] = await prisma.position.upsert({
+      where: { code: p.code },
+      update: {
+        titleAr: p.titleAr, titleEn: p.titleEn,
+        deptId: depts[p.deptCode].id, level: p.level,
+        minSalary: p.level * 2000, maxSalary: p.level * 5000,
+      },
+      create: {
         code: p.code, titleAr: p.titleAr, titleEn: p.titleEn,
         deptId: depts[p.deptCode].id, level: p.level,
         minSalary: p.level * 2000, maxSalary: p.level * 5000,
