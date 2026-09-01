@@ -94,8 +94,10 @@ router.post('/sessions/:id/enroll', async (req, res, next) => {
 
 router.get('/enrollments/me', async (req, res, next) => {
   try {
+    const empId = selfId(req);
+    if (!empId) return res.json({ enrollments: [] });
     const enrollments = await prisma.enrollment.findMany({
-      where: { employeeId: selfId(req) },
+      where: { employeeId: empId },
       include: { session: { include: { course: true } } },
       orderBy: { createdAt: 'desc' },
     });

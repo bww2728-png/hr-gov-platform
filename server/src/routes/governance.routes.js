@@ -34,11 +34,43 @@ router.get('/all', reqPerm('governance.read'), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
+/** GET /api/governance/audit — آخر أحداث الحوكمة (تبويب "آخر التغييرات" في مركز الشفافية) */
+router.get('/audit', reqPerm('governance.read', 'formulas.read'), async (req, res, next) => {
+  try {
+    const limit = Math.min(100, Math.max(1, Number(req.query.limit) || 20));
+    const rows = await prisma.auditLog.findMany({
+      where: {
+        OR: [
+          { action: { startsWith: 'governance.' } },
+          { action: { startsWith: 'formula' } },
+          { entityType: { in: ['change_request', 'formula_definition', 'lookup', 'lookup_category'] } },
+        ],
+      },
+      include: { user: { select: { fullNameAr: true } } },
+      orderBy: { createdAt: 'desc' },
+      take: limit,
+    });
+    res.json({
+      entries: rows.map((r) => ({
+        id: String(r.id),
+        createdAt: r.createdAt,
+        actorName: r.user?.fullNameAr || 'النظام',
+        action: r.action,
+        entityType: r.entityType,
+        entityCode: r.entityId,
+        reason: r.reason,
+      })),
+    });
+  } catch (e) { next(e); }
+});
+
 /** GET /api/governance/:id — تفاصيل طلب */
 router.get('/:id', reqPerm('governance.read'), async (req, res, next) => {
   try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(404).json({ error: 'غير موجود' });
     const item = await prisma.changeRequest.findUnique({
-      where: { id: Number(req.params.id) },
+      where: { id },
       include: { proposer: { select: { id: true, fullNameAr: true, username: true } } },
     });
     if (!item) return res.status(404).json({ error: 'غير موجود' });
