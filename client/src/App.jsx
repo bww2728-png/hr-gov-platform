@@ -57,7 +57,6 @@ function Protected({ children }) {
   const { user, loading } = useAuth();
   if (loading) return <div className="h-full flex items-center justify-center text-ink-500">جاري التحميل...</div>;
   if (!user) return <Navigate to="/login" replace />;
-  if (user.mustChangePassword) return <Navigate to="/change-password" replace />;
   return children;
 }
 

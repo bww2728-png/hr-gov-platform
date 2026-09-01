@@ -35,7 +35,7 @@ export default function Login() {
     try {
       const u = await login(username, 'Admin@12345');
       toast.success('مرحباً ' + (u.fullNameAr || u.username));
-      nav(u.mustChangePassword ? '/change-password' : '/');
+      nav('/');
     } catch (err) {
       toast.error(errMsg(err));
       setSubmitting(null);
@@ -93,7 +93,7 @@ export default function Login() {
             })}
           </div>
           <div className="mt-5 pt-4 border-t border-ink-100 text-xs text-ink-500 text-center">
-            بيئة الناضج التجريبية — الحسابات تتطلب كلمة مرور افتراضية.
+            بيئة الناضج التجريبية — اضغط أي حساب للدخول مباشرة دون كلمة مرور.
           </div>
         </div>
       </div>

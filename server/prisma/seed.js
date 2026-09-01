@@ -312,7 +312,7 @@ async function main() {
         passwordHash,
         roleId: roles[u.role].id,
         status: 'active',
-        mustChangePassword: u.username === 'admin',
+        mustChangePassword: false,
       },
     });
   }
