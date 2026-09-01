@@ -269,7 +269,7 @@ async function seedGovernance({ prisma, users, employees, positions, departments
   // 7) هوية الناضج
   console.log('[seed-gov] Alnadij brand settings…');
   for (const s of BRAND_SETTINGS) {
-    await prisma.setting.upsert({ where: { key: s.key }, update: { value: s.value }, create: { data: s } });
+    await prisma.setting.upsert({ where: { key: s.key }, update: { value: s.value }, create: s });
   }
 
   return { sections };
