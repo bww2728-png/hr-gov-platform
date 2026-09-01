@@ -9,6 +9,7 @@ const QUICK_ACCOUNTS = [
   { username: 'admin',      label: 'مسؤول النظام' },
   { username: 'executive',  label: 'المدير التنفيذي' },
   { username: 'hrdir',      label: 'مدير الموارد البشرية' },
+  { username: 'finance',    label: 'المدير المالي' },
   { username: 'hrmgr',      label: 'أخصائي HR' },
   { username: 'manager',    label: 'مدير مباشر' },
   { username: 'recruiter',  label: 'مسؤول التوظيف' },
