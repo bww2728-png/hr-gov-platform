@@ -941,10 +941,10 @@ async function main() {
   // ============================================================
   // SETTINGS
   // ============================================================
-  await prisma.setting.upsert({ where: { key: 'org.name_ar' }, update: { value: 'شركة الناضج' }, create: { data: { key: 'org.name_ar', value: 'شركة الناضج' } } });
-  await prisma.setting.upsert({ where: { key: 'org.name_en' }, update: { value: 'Alnadij Company' }, create: { data: { key: 'org.name_en', value: 'Alnadij Company' } } });
-  await prisma.setting.upsert({ where: { key: 'org.vision_ar' }, update: { value: 'أن نكون الشركة الرائدة في حوكمة الموارد البشرية بالمملكة' }, create: { data: { key: 'org.vision_ar', value: 'أن نكون الشركة الرائدة في حوكمة الموارد البشرية بالمملكة' } } });
-  await prisma.setting.upsert({ where: { key: 'system.default_language' }, update: { value: 'ar' }, create: { data: { key: 'system.default_language', value: 'ar' } } });
+  await prisma.setting.upsert({ where: { key: 'org.name_ar' }, update: { value: 'شركة الناضج' }, create: { key: 'org.name_ar', value: 'شركة الناضج' } });
+  await prisma.setting.upsert({ where: { key: 'org.name_en' }, update: { value: 'Alnadij Company' }, create: { key: 'org.name_en', value: 'Alnadij Company' } });
+  await prisma.setting.upsert({ where: { key: 'org.vision_ar' }, update: { value: 'أن نكون الشركة الرائدة في حوكمة الموارد البشرية بالمملكة' }, create: { key: 'org.vision_ar', value: 'أن نكون الشركة الرائدة في حوكمة الموارد البشرية بالمملكة' } });
+  await prisma.setting.upsert({ where: { key: 'system.default_language' }, update: { value: 'ar' }, create: { key: 'system.default_language', value: 'ar' } });
 
   // ============================================================
   // AUDIT LOG: a few initial entries
