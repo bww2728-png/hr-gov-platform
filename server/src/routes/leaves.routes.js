@@ -115,6 +115,7 @@ router.get('/requests', async (req, res, next) => {
     const where = { deletedAt: null };
     if (!canSeeAll(req)) {
       const empId = selfId(req);
+      if (!empId) return res.json({ requests: [] });
       const perms = Array.isArray(req.user.role?.permissions) ? req.user.role.permissions : [];
       if (perms.includes('requests.read.team') || perms.includes('leaves.approve')) {
         const team = await prisma.employee.findMany({ where: { managerId: empId }, select: { id: true } });

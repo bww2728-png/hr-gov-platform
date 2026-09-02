@@ -21,7 +21,11 @@ router.get('/records', async (req, res, next) => {
     const seeAll = perms.includes('*') || perms.includes('attendance.read');
     const where = {};
     if (req.query.employeeId && seeAll) where.employeeId = String(req.query.employeeId);
-    else if (!seeAll) where.employeeId = selfId(req);
+    else if (!seeAll) {
+      const empId = selfId(req);
+      if (!empId) return res.json({ records: [] });
+      where.employeeId = empId;
+    }
     if (req.query.from) where.date = { ...(where.date || {}), gte: new Date(String(req.query.from)) };
     if (req.query.to) where.date = { ...(where.date || {}), lte: new Date(String(req.query.to)) };
     const records = await prisma.attendanceRecord.findMany({ where, orderBy: { date: 'desc' }, take: 500 });
@@ -134,7 +138,9 @@ router.get('/overtime', async (req, res, next) => {
   try {
     const perms = Array.isArray(req.user.role?.permissions) ? req.user.role.permissions : [];
     const seeAll = perms.includes('*') || perms.includes('overtime.read') || perms.includes('overtime.approve');
-    const where = seeAll ? {} : { employeeId: selfId(req) };
+    const empId = selfId(req);
+    if (!seeAll && !empId) return res.json({ requests: [] });
+    const where = seeAll ? {} : { employeeId: empId };
     if (req.query.status) where.status = String(req.query.status);
     const requests = await prisma.overtimeRequest.findMany({ where, orderBy: { createdAt: 'desc' }, take: 200 });
     res.json({ requests });
