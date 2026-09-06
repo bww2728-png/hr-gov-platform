@@ -88,7 +88,12 @@ function createApp() {
   );
 
   app.get('/api/health', (req, res) =>
-    res.json({ ok: true, ts: new Date().toISOString(), service: 'hr-governance' })
+    res.json({
+      ok: true,
+      ts: new Date().toISOString(),
+      service: 'hr-governance',
+      version: process.env.RAILWAY_GIT_COMMIT_SHA || process.env.GIT_COMMIT_SHA || 'dev',
+    })
   );
 
   app.use('/api/auth', authRoutes);
