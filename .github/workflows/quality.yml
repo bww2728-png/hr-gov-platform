@@ -29,7 +29,7 @@ jobs:
       - name: Install client dependencies
         run: npm --prefix client ci
       - name: Validate Prisma schema
-        run: npm --prefix server exec prisma validate -- --schema prisma/schema.prisma
+        run: npm --prefix server exec prisma -- validate --schema prisma/schema.prisma
       - name: Check server syntax
         shell: bash
         run: |
