@@ -120,7 +120,7 @@ router.get('/employees', authenticate, async (req, res, next) => {
 
     // Mask salaries unless allowed
     const perms = req.user.role?.permissions || [];
-    const canSeeSalary = perms.includes('hr.employee.read.salary');
+    const canSeeSalary = perms.includes('hr.employee.read.salary') || perms.includes('*');
     const masked = employees.map(({ nationalId, ...e }) => ({
       ...e,
       salary: canSeeSalary ? e.salary : null,
@@ -148,7 +148,7 @@ router.get('/employees/:id', authenticate, async (req, res, next) => {
     if (!emp) return res.status(404).json({ error: 'الموظف غير موجود' });
 
     const perms = req.user.role?.permissions || [];
-    const canSeeSalary = perms.includes('hr.employee.read.salary');
+    const canSeeSalary = perms.includes('hr.employee.read.salary') || perms.includes('*');
     if (!canSeeSalary) {
       emp.salary = null; emp.iban = null; emp.bankAccount = null; emp.nationalId = null;
     }
