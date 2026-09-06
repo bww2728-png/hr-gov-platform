@@ -2,7 +2,10 @@
  * محرك قواعد نظام العمل السعودي
  * كل القواعد قابلة للتعديل عبر الإعدادات/قاعدة البيانات — القيم الافتراضية حسب
  * نظام العمل السعودي ومخططات المعاملات (الملف المرجعي).
+ * GOSI والعمل الإضافي تُقرأ لحظياً من policyStore (مركز السياسات) مع سقوط احتياطي للقيم الصلبة.
  */
+
+const policyStore = require('./policyStore');
 
 const RULES = {
   // الإجازة السنوية: <5 سنوات = 21 يوم، ≥5 سنوات = 30 يوم (معاملة 35)
@@ -30,10 +33,16 @@ const RULES = {
   bereavement: { days: 5 },
   // فترة التجربة (معاملة 23)
   probation: { days: 90, midReviewDay: 45, secondReviewDay: 60 },
-  // العمل الإضافي (معاملة 27)
-  overtime: { yearCapHours: 720, multiplier: 1.5 },
-  // التأمينات الاجتماعية GOSI (معاملة 17, 50)
-  gosi: { employeePct: 9.75, employerPct: 11.75 },
+  // العمل الإضافي (معاملة 27) — قيم ديناميكية من مركز السياسات
+  overtime: {
+    get yearCapHours() { return policyStore.get('overtime.yearCapHours'); },
+    get multiplier() { return policyStore.get('overtime.multiplier'); },
+  },
+  // التأمينات الاجتماعية GOSI (معاملة 17, 50) — قيم ديناميكية من مركز السياسات
+  gosi: {
+    get employeePct() { return policyStore.get('gosi.employeePct'); },
+    get employerPct() { return policyStore.get('gosi.employerPct'); },
+  },
   // رخصة العمل (معاملة 16)
   workPermitFee: { above50Employees: 9000, upTo50Employees: 7200 },
   // تأشيرة الزيارة العائلية (معاملة 18)
@@ -135,12 +144,14 @@ function calculateEOS({ hireDate, endDate = new Date(), lastSalary, reason, year
   return breakdown;
 }
 
-/** حساب حصص GOSI */
-function gosiShares(salaryBase) {
+/** حساب حصص GOSI — مع دعم snapshot المعاملات لتثبيت القيم على المسير */
+function gosiShares(salaryBase, snap) {
   const base = Number(salaryBase) || 0;
+  const employeePct = snap ? policyStore.valueFrom(snap, 'gosi.employeePct') : RULES.gosi.employeePct;
+  const employerPct = snap ? policyStore.valueFrom(snap, 'gosi.employerPct') : RULES.gosi.employerPct;
   return {
-    employee: Math.round(base * RULES.gosi.employeePct) / 100,
-    employer: Math.round(base * RULES.gosi.employerPct) / 100,
+    employee: Math.round(base * employeePct) / 100,
+    employer: Math.round(base * employerPct) / 100,
   };
 }
 

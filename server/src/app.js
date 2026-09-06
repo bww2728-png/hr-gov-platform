@@ -31,6 +31,7 @@ const requestsRoutes = require('./routes/requests.routes');
 const govDocsRoutes = require('./routes/govDocs.routes');
 const governanceRoutes = require('./routes/governance.routes');
 const formulasRoutes = require('./routes/formulas.routes');
+const policiesRoutes = require('./routes/policies.routes');
 const reportsRoutes = require('./routes/reports.routes');
 const qiwaRoutes = require('./routes/qiwa.routes');
 
@@ -147,6 +148,7 @@ function createApp() {
   app.use('/api/gov-docs', govDocsRoutes);
   app.use('/api/governance', governanceRoutes);
   app.use('/api/formulas', formulasRoutes);
+  app.use('/api/policies', policiesRoutes);
   app.use('/api/reports', reportsRoutes);
   app.use('/api/qiwa', qiwaRoutes);
 

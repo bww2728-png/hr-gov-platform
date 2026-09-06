@@ -4,6 +4,7 @@
 const express = require('express');
 const { z } = require('zod');
 const prisma = require('../prisma');
+const policyStore = require('../utils/policyStore');
 const { authenticate, require: requirePerm } = require('../middleware/auth');
 const { audit } = require('../middleware/audit');
 const saudi = require('../utils/saudiRules');
@@ -49,6 +50,11 @@ router.post('/runs/:id/calculate', requirePerm('payroll.prepare'), async (req, r
     const monthStart = new Date(run.year, run.month - 1, 1);
     const monthEnd = new Date(run.year, run.month, 0);
 
+    // تثبيت قيم السياسات المالية لحظة الحساب (إعادة إنتاج تاريخية مضمونة)
+    const paramsSnapshot = await policyStore.snapshot();
+    const otMultiplier = policyStore.valueFrom(paramsSnapshot, 'overtime.multiplier');
+    const absenceDivisor = policyStore.valueFrom(paramsSnapshot, 'absence.dailyDivisor');
+
     const result = await prisma.$transaction(async (tx) => {
       await tx.payrollItem.deleteMany({ where: { runId: id } });
       let totalGross = 0; let totalNet = 0; let totalGosi = 0;
@@ -65,14 +71,14 @@ router.post('/runs/:id/calculate', requirePerm('payroll.prepare'), async (req, r
           where: { employeeId: emp.id, status: 'approved', date: { gte: monthStart, lte: monthEnd } },
         });
         const hourlyRate = base / 240; // 30 يوم × 8 ساعات
-        const overtimePay = D((ot._sum.hours || 0) * hourlyRate * saudi.RULES.overtime.multiplier);
+        const overtimePay = D((ot._sum.hours || 0) * hourlyRate * otMultiplier);
 
         // المكافآت المعتمدة غير المصروفة؛ ربطها بالمسير يتم بعد الدفع.
         const bonuses = await tx.bonus.findMany({ where: { employeeId: emp.id, status: 'approved', payrollRunId: null } });
         const bonusPay = D(bonuses.reduce((s, b) => s + Number(b.amount), 0));
 
-        // GOSI على (الأساسي + السكن)
-        const gosi = saudi.gosiShares(base + housing + transport + otherAllow);
+        // GOSI على (الأساسي + السكن) — من snapshot المعاملات
+        const gosi = saudi.gosiShares(base + housing + transport + otherAllow, paramsSnapshot);
 
         // أقساط السلف النشطة؛ تحديث الرصيد يتم فقط بعد اعتماد/دفع المسير.
         const loans = await tx.loan.findMany({ where: { employeeId: emp.id, status: 'active' } });
@@ -85,7 +91,7 @@ router.post('/runs/:id/calculate', requirePerm('payroll.prepare'), async (req, r
         const absences = await tx.attendanceRecord.count({
           where: { employeeId: emp.id, status: 'absent', date: { gte: monthStart, lte: monthEnd } },
         });
-        const absenceDeduct = D(absences * (base / 30));
+        const absenceDeduct = D(absences * (base / absenceDivisor));
 
         const gross = D(base + housing + transport + otherAllow + overtimePay + bonusPay);
         const net = D(gross - gosi.employee - loanDeduct - absenceDeduct);
@@ -103,7 +109,7 @@ router.post('/runs/:id/calculate', requirePerm('payroll.prepare'), async (req, r
 
       return tx.payrollRun.update({
         where: { id },
-        data: { status: 'calculated', totalGross: D(totalGross), totalNet: D(totalNet), totalGosi: D(totalGosi) },
+        data: { status: 'calculated', totalGross: D(totalGross), totalNet: D(totalNet), totalGosi: D(totalGosi), paramsSnapshotJson: paramsSnapshot },
       });
     });
 

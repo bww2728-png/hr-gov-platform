@@ -96,6 +96,113 @@ async function proposeFormulaChange({ formulaCode, payload, before, reason, user
   return { applied: false, changeRequest: cr, chain };
 }
 
+/** اقتراح تغيير معامل سياسة (متغير مركزي) */
+async function proposeParameterChange({ parameterCode, value, effectiveFrom, reason, user }) {
+  const param = await prisma.policyParameter.findUnique({ where: { code: parameterCode } });
+  if (!param) throw new GovernanceError(`معامل غير معروف: ${parameterCode}`, 404);
+  if (!isOwner(user, Array.isArray(param.ownerRoles) ? param.ownerRoles : [])) {
+    throw new GovernanceError('ممنوع: لست مالكاً لهذا المعامل', 403);
+  }
+  if (!reason || !String(reason).trim()) throw new GovernanceError('سبب التغيير إلزامي (مبدأ البصمة والتوثيق)');
+  if (!hasPerm(user, 'policies.propose') && !isSysadmin(user)) {
+    throw new GovernanceError('ممنوع: لا تملك صلاحية اقتراح تعديل المعايير', 403);
+  }
+  const num = Number(value);
+  if (!Number.isFinite(num)) throw new GovernanceError('قيمة المعامل يجب أن تكون رقمية');
+  if (param.minValue != null && num < param.minValue) throw new GovernanceError(`القيمة أدنى من الحد الأدنى (${param.minValue})`);
+  if (param.maxValue != null && num > param.maxValue) throw new GovernanceError(`القيمة أعلى من الحد الأقصى (${param.maxValue})`);
+  const eff = effectiveFrom ? new Date(effectiveFrom) : new Date();
+  if (Number.isNaN(eff.getTime())) throw new GovernanceError('تاريخ السريان غير صالح');
+
+  const payload = { value: num, effectiveFrom: eff.toISOString() };
+  if (!param.requiresApproval) {
+    const applied = await applyParameterChange(param, payload, user, String(reason).trim());
+    return { applied: true, result: applied, chain: [] };
+  }
+  const cr = await prisma.changeRequest.create({
+    data: {
+      kind: 'parameter',
+      targetKey: parameterCode,
+      action: 'update',
+      payloadJson: payload,
+      beforeJson: { value: (await currentParameterValue(parameterCode)), version: param.version },
+      reason: String(reason).trim(),
+      proposedBy: user.id,
+      approverRoles: Array.isArray(param.approverRoles) ? param.approverRoles : [],
+    },
+    include: { proposer: { select: { id: true, fullNameAr: true, username: true } } },
+  });
+  return { applied: false, changeRequest: cr, chain: cr.approverChain };
+}
+
+async function currentParameterValue(code) {
+  const store = require('./policyStore');
+  return store.get(code);
+}
+
+/** تطبيق نسخة جديدة من معامل سياسة + إبطال الكاش اللحظي */
+async function applyParameterChange(param, payload, user, reason, changeRequestId) {
+  const store = require('./policyStore');
+  const oldValue = store.get(param.code);
+  const version = param.version + 1;
+  const [, newVersion] = await prisma.$transaction([
+    prisma.policyParameter.update({ where: { code: param.code }, data: { version } }),
+    prisma.policyParameterVersion.create({
+      data: {
+        parameterCode: param.code,
+        version,
+        valueJson: payload.value,
+        effectiveFrom: new Date(payload.effectiveFrom),
+        reason,
+        changeRequestId: changeRequestId || null,
+        createdBy: user?.id || null,
+      },
+    }),
+  ]);
+  await store.load(); // انعكاس لحظي بدون إعادة نشر
+  try { require('../socket').getIO()?.emit('public:policies.updated', { code: param.code, at: new Date().toISOString() }); } catch { /* socket غير مهيأ */ }
+  await prisma.auditLog.create({
+    data: {
+      userId: user?.id || null,
+      action: 'policy.parameter.apply',
+      entityType: 'policy_parameter',
+      entityId: param.code,
+      beforeJson: { value: oldValue },
+      afterJson: { value: payload.value, version },
+      reason,
+      correlationId: changeRequestId ? `CR-${changeRequestId}` : null,
+    },
+  });
+  return { code: param.code, version: newVersion.version, value: newVersion.valueJson };
+}
+
+/** اقتراح تغيير قواعد نوع إجازة (سقوف/أرصدة) */
+async function proposeLeaveTypeRulesChange({ leaveTypeCode, rules, reason, user }) {
+  const lt = await prisma.leaveType.findUnique({ where: { code: leaveTypeCode } });
+  if (!lt) throw new GovernanceError(`نوع إجازة غير معروف: ${leaveTypeCode}`, 404);
+  if (!isOwner(user, ['hr_director']) && !isSysadmin(user)) {
+    throw new GovernanceError('ممنوع: تعديل سقوف الإجازات من اختصاص مدير الموارد البشرية', 403);
+  }
+  if (!reason || !String(reason).trim()) throw new GovernanceError('سبب التغيير إلزامي');
+  if (!hasPerm(user, 'policies.propose') && !isSysadmin(user)) {
+    throw new GovernanceError('ممنوع: لا تملك صلاحية اقتراح تعديل قواعد الإجازات', 403);
+  }
+  const cr = await prisma.changeRequest.create({
+    data: {
+      kind: 'leave_type_rules',
+      targetKey: `leaveType:${leaveTypeCode}`,
+      action: 'update',
+      payloadJson: { rules },
+      beforeJson: { rules: lt.rulesJson },
+      reason: String(reason).trim(),
+      proposedBy: user.id,
+      approverRoles: ['hr_director', 'ceo'],
+    },
+    include: { proposer: { select: { id: true, fullNameAr: true, username: true } } },
+  });
+  return { applied: false, changeRequest: cr, chain: cr.approverChain };
+}
+
 /**
  * اعتماد/رفض مرحلة في طلب تغيير.
  * يفرض: SoD (المقترح ≠ المعتمد)، الأربع عيون (لا اعتماد مكرر)، ترتيب السلسلة.
@@ -174,7 +281,41 @@ async function applyChangeRequest(cr, approverUser) {
       reason: cr.reason,
       changeRequestId: cr.id,
     });
+  } else if (cr.kind === 'parameter') {
+    const param = await prisma.policyParameter.findUnique({ where: { code: cr.targetKey } });
+    if (!param) throw new GovernanceError(`المعامل غير موجود: ${cr.targetKey}`, 404);
+    await applyParameterChange(param, cr.payloadJson, approverUser, cr.reason, cr.id);
+  } else if (cr.kind === 'leave_type_rules') {
+    const [, code] = String(cr.targetKey).split(':');
+    const rules = cr.payloadJson?.rules;
+    await prisma.leaveType.update({ where: { code }, data: { rulesJson: rules } });
+    await prisma.auditLog.create({
+      data: {
+        userId: approverUser.id,
+        action: 'policy.leave_type_rules.apply',
+        entityType: 'leave_type',
+        entityId: code,
+        beforeJson: cr.beforeJson || undefined,
+        afterJson: cr.payloadJson || undefined,
+        reason: cr.reason,
+        correlationId: `CR-${cr.id}`,
+      },
+    });
   } else if (cr.kind === 'formula') {
+    if (cr.payloadJson?.logicJson !== undefined) {
+      const before = await prisma.formulaDefinition.findUnique({ where: { code: cr.targetKey } });
+      await prisma.formulaRevision.create({
+        data: {
+          formulaCode: cr.targetKey,
+          version: before.version,
+          logicJson: before.logicJson ?? undefined,
+          expressionAr: before.expressionAr,
+          reason: cr.reason,
+          changeRequestId: cr.id,
+          createdBy: approverUser.id,
+        },
+      });
+    }
     await prisma.formulaDefinition.update({
       where: { code: cr.targetKey },
       data: { ...pickFormulaFields(cr.payloadJson), version: { increment: 1 } },
@@ -196,7 +337,7 @@ async function applyChangeRequest(cr, approverUser) {
 
 const pickFormulaFields = (p = {}) => {
   const out = {};
-  for (const k of ['nameAr', 'nameEn', 'expressionAr', 'variablesJson', 'exampleJson', 'notes', 'isActive']) {
+  for (const k of ['nameAr', 'nameEn', 'expressionAr', 'variablesJson', 'exampleJson', 'notes', 'isActive', 'logicJson']) {
     if (p[k] !== undefined) out[k] = p[k];
   }
   return out;
@@ -282,6 +423,8 @@ module.exports = {
   GovernanceError,
   proposeLookupChange,
   proposeFormulaChange,
+  proposeParameterChange,
+  proposeLeaveTypeRulesChange,
   decide,
   pendingFor,
   getCategory,

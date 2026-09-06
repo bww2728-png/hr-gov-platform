@@ -7,6 +7,9 @@ const app = createApp();
 const server = http.createServer(app);
 const io = initSocket(server);
 
+// تهيئة كاش مركز السياسات عند الإقلاع (الانعكاس اللحظي بعدها لا يحتاج إعادة نشر)
+require('./utils/policyStore').load().catch((e) => console.error('[policyStore] load failed:', e.message));
+
 const host = config.host;
 const port = config.port;
 server.listen(port, host, () => {
