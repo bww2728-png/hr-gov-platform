@@ -54,7 +54,14 @@ function createApp() {
         : false,
     })
   );
-  app.use(cors({ origin: config.clientOrigins, credentials: true }));
+  app.use(cors({
+    origin(origin, callback) {
+      if (!origin || config.clientOrigins.includes(origin)) return callback(null, true);
+      if (!config.isProd && config.clientOrigins.length === 0) return callback(null, true);
+      return callback(new Error('Origin not allowed'));
+    },
+    credentials: true,
+  }));
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
 
@@ -66,6 +73,17 @@ function createApp() {
       standardHeaders: true,
       legacyHeaders: false,
       message: { error: 'طلبات كثيرة، حاول لاحقاً' },
+    })
+  );
+
+  app.use(
+    '/api/auth/login',
+    rateLimit({
+      windowMs: 15 * 60 * 1000,
+      max: 10,
+      standardHeaders: true,
+      legacyHeaders: false,
+      message: { error: 'محاولات دخول كثيرة، حاول لاحقاً' },
     })
   );
 

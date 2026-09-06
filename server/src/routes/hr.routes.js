@@ -121,11 +121,12 @@ router.get('/employees', authenticate, async (req, res, next) => {
     // Mask salaries unless allowed
     const perms = req.user.role?.permissions || [];
     const canSeeSalary = perms.includes('hr.employee.read.salary');
-    const masked = employees.map((e) => ({
+    const masked = employees.map(({ nationalId, ...e }) => ({
       ...e,
       salary: canSeeSalary ? e.salary : null,
       iban: canSeeSalary ? e.iban : null,
       bankAccount: canSeeSalary ? e.bankAccount : null,
+      nationalId: canSeeSalary ? nationalId : null,
     }));
 
     res.json({ employees: masked });
@@ -149,7 +150,7 @@ router.get('/employees/:id', authenticate, async (req, res, next) => {
     const perms = req.user.role?.permissions || [];
     const canSeeSalary = perms.includes('hr.employee.read.salary');
     if (!canSeeSalary) {
-      emp.salary = null; emp.iban = null; emp.bankAccount = null;
+      emp.salary = null; emp.iban = null; emp.bankAccount = null; emp.nationalId = null;
     }
     res.json({ employee: emp });
   } catch (e) { next(e); }

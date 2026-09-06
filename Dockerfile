@@ -21,4 +21,4 @@ COPY --from=client-build /app/client/dist ../client/dist
 
 EXPOSE 4000
 # DATABASE_URL/PORT/HOST/JWT_SECRET provided via Railway env vars.
-CMD ["sh", "-c", "echo '[boot] prisma db push...' && npx prisma db push --skip-generate --accept-data-loss && echo '[boot] seeding...' && (node prisma/seed.js || echo '[boot] seed skipped') && echo '[boot] starting server...' && node src/index.js"]
+CMD ["sh", "-c", "echo '[boot] starting server...' && node src/index.js"]

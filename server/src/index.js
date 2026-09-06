@@ -5,7 +5,7 @@ const { initSocket } = require('./socket');
 
 const app = createApp();
 const server = http.createServer(app);
-initSocket(server);
+const io = initSocket(server);
 
 const host = config.host;
 const port = config.port;
@@ -14,3 +14,16 @@ server.listen(port, host, () => {
 });
 
 process.on('unhandledRejection', (e) => console.error('unhandledRejection:', e));
+
+async function shutdown(signal) {
+  console.log(`[shutdown] ${signal}`);
+  io.close();
+  server.close(async () => {
+    const prisma = require('./prisma');
+    await prisma.$disconnect();
+    process.exit(0);
+  });
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));

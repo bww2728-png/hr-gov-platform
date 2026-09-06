@@ -36,3 +36,6 @@ client/src/hooks/useSocket.js
 # Misc local artefacts
 cj.txt
 deploy.bat
+_authscan.txt
+*.cookies
+*.headers

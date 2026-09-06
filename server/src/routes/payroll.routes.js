@@ -43,7 +43,7 @@ router.post('/runs/:id/calculate', requirePerm('payroll.prepare'), async (req, r
     const id = Number(req.params.id);
     const run = await prisma.payrollRun.findUnique({ where: { id } });
     if (!run) return res.status(404).json({ error: 'المسير غير موجود' });
-    if (!['draft', 'calculated'].includes(run.status)) return res.status(400).json({ error: 'لا يمكن الحساب في هذه الحالة' });
+    if (run.status !== 'draft') return res.status(400).json({ error: 'لا يمكن الحساب إلا لمسير مسودة' });
 
     const employees = await prisma.employee.findMany({ where: { employmentStatus: 'active', deletedAt: null } });
     const monthStart = new Date(run.year, run.month - 1, 1);
@@ -55,8 +55,9 @@ router.post('/runs/:id/calculate', requirePerm('payroll.prepare'), async (req, r
 
       for (const emp of employees) {
         const base = Number(emp.salary) || 0;
-        const housing = D(base * 0.25);
-        const transport = 500;
+        const housing = D(Number(emp.housingAllowance) || 0);
+        const transport = D(Number(emp.transportAllowance) || 0);
+        const otherAllow = D(Number(emp.otherAllowances) || 0);
 
         // العمل الإضافي المعتمد هذا الشهر
         const ot = await tx.overtimeRequest.aggregate({
@@ -66,23 +67,19 @@ router.post('/runs/:id/calculate', requirePerm('payroll.prepare'), async (req, r
         const hourlyRate = base / 240; // 30 يوم × 8 ساعات
         const overtimePay = D((ot._sum.hours || 0) * hourlyRate * saudi.RULES.overtime.multiplier);
 
-        // المكافآت المعتمدة غير المصروفة
+        // المكافآت المعتمدة غير المصروفة؛ ربطها بالمسير يتم بعد الدفع.
         const bonuses = await tx.bonus.findMany({ where: { employeeId: emp.id, status: 'approved', payrollRunId: null } });
         const bonusPay = D(bonuses.reduce((s, b) => s + Number(b.amount), 0));
 
         // GOSI على (الأساسي + السكن)
-        const gosi = saudi.gosiShares(base + housing);
+        const gosi = saudi.gosiShares(base + housing + transport + otherAllow);
 
-        // أقساط السلف النشطة
+        // أقساط السلف النشطة؛ تحديث الرصيد يتم فقط بعد اعتماد/دفع المسير.
         const loans = await tx.loan.findMany({ where: { employeeId: emp.id, status: 'active' } });
-        let loanDeduct = 0;
-        for (const loan of loans) {
-          const deduct = Math.min(Number(loan.monthlyDeduct), Number(loan.remaining));
-          loanDeduct += deduct;
-          const remaining = D(Number(loan.remaining) - deduct);
-          await tx.loan.update({ where: { id: loan.id }, data: { remaining, status: remaining <= 0 ? 'settled' : 'active' } });
-        }
-        loanDeduct = D(loanDeduct);
+        const loanDeduct = D(loans.reduce(
+          (sum, loan) => sum + Math.min(Number(loan.monthlyDeduct), Number(loan.remaining)),
+          0
+        ));
 
         // خصم الغياب (أيام × معدل يومي)
         const absences = await tx.attendanceRecord.count({
@@ -90,20 +87,17 @@ router.post('/runs/:id/calculate', requirePerm('payroll.prepare'), async (req, r
         });
         const absenceDeduct = D(absences * (base / 30));
 
-        const gross = D(base + housing + transport + overtimePay + bonusPay);
+        const gross = D(base + housing + transport + otherAllow + overtimePay + bonusPay);
         const net = D(gross - gosi.employee - loanDeduct - absenceDeduct);
 
         await tx.payrollItem.create({
           data: {
             runId: id, employeeId: emp.id,
-            baseSalary: base, housing, transport, overtimePay, bonusPay,
+            baseSalary: base, housing, transport, otherAllow, overtimePay, bonusPay,
             gosiEmployee: gosi.employee, gosiEmployer: gosi.employer,
             loanDeduct, absenceDeduct, gross, net, iban: emp.iban || null,
           },
         });
-        if (bonuses.length) {
-          await tx.bonus.updateMany({ where: { id: { in: bonuses.map((b) => b.id) } }, data: { status: 'paid', payrollRunId: id } });
-        }
         totalGross += gross; totalNet += net; totalGosi += gosi.employer;
       }
 
@@ -145,7 +139,41 @@ router.post('/runs/:id/pay', requirePerm('payroll.approve'), async (req, res, ne
     const id = Number(req.params.id);
     const run = await prisma.payrollRun.findUnique({ where: { id } });
     if (!run || run.status !== 'approved') return res.status(400).json({ error: 'المسير يحتاج اعتماداً أولاً' });
-    const updated = await prisma.payrollRun.update({ where: { id }, data: { status: 'paid', paidAt: new Date() } });
+    const updated = await prisma.$transaction(async (tx) => {
+      const paid = await tx.payrollRun.update({
+        where: { id },
+        data: { status: 'paid', paidAt: new Date() },
+      });
+      const items = await tx.payrollItem.findMany({ where: { runId: id } });
+      for (const item of items) {
+        const loans = await tx.loan.findMany({ where: { employeeId: item.employeeId, status: 'active' } });
+        let remainingDeduction = Number(item.loanDeduct);
+        for (const loan of loans) {
+          if (remainingDeduction <= 0) break;
+          const deduction = Math.min(Number(loan.monthlyDeduct), Number(loan.remaining), remainingDeduction);
+          const remaining = D(Number(loan.remaining) - deduction);
+          remainingDeduction = D(remainingDeduction - deduction);
+          await tx.loan.update({
+            where: { id: loan.id },
+            data: { remaining, status: remaining <= 0 ? 'settled' : 'active' },
+          });
+        }
+      }
+      const bonuses = await tx.bonus.findMany({
+        where: {
+          payrollRunId: null,
+          status: 'approved',
+          employeeId: { in: items.map((item) => item.employeeId) },
+        },
+      });
+      if (bonuses.length) {
+        await tx.bonus.updateMany({
+          where: { id: { in: bonuses.map((bonus) => bonus.id) } },
+          data: { status: 'paid', payrollRunId: id },
+        });
+      }
+      return paid;
+    });
     audit(req, 'payroll.run.pay', { entityType: 'payroll_run', entityId: String(id) });
     res.json({ run: updated });
   } catch (e) { next(e); }
