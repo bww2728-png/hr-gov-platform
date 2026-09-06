@@ -65,6 +65,33 @@ function createApp() {
   app.use(express.json({ limit: '1mb' }));
   app.use(cookieParser());
 
+  app.use('/api', (req, res, next) => {
+    if (['POST', 'PUT', 'PATCH', 'DELETE'].includes(req.method)) {
+      const origin = req.get('origin');
+      if (origin && !config.clientOrigins.includes(origin)) {
+        return res.status(403).json({ error: 'Origin not allowed' });
+      }
+    }
+    res.on('finish', () => {
+      if (res.statusCode === 401 || res.statusCode === 403) {
+        const prisma = require('./prisma');
+        prisma.auditLog
+          .create({
+            data: {
+              userId: req.user?.id || null,
+              action: `http.${res.statusCode}`,
+              entityType: 'http',
+              entityId: (req.originalUrl || '').slice(0, 150),
+              ipAddress: req.ip || null,
+              userAgent: (req.get('user-agent') || '').slice(0, 200) || null,
+            },
+          })
+          .catch(() => {});
+      }
+    });
+    next();
+  });
+
   app.use(
     '/api',
     rateLimit({

@@ -14,9 +14,18 @@ const loginSchema = z.object({
   password: z.string().min(1).max(200),
 });
 
+const strongPassword = z
+  .string()
+  .min(12)
+  .max(200)
+  .regex(/[A-Z]/)
+  .regex(/[a-z]/)
+  .regex(/[0-9]/)
+  .regex(/[^A-Za-z0-9]/);
+
 const changePasswordSchema = z.object({
   currentPassword: z.string().min(1),
-  newPassword: z.string().min(8).max(200),
+  newPassword: strongPassword,
 });
 
 const MAX_FAILED = 5;

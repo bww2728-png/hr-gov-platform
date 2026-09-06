@@ -21,4 +21,7 @@ COPY --from=client-build /app/client/dist ../client/dist
 
 EXPOSE 4000
 # DATABASE_URL/PORT/HOST/JWT_SECRET provided via Railway env vars.
-CMD ["sh", "-c", "echo '[boot] starting server...' && node src/index.js"]
+# migrate deploy is authoritative; on a pre-existing db push schema it falls back
+# to a non-destructive db push (no --accept-data-loss) so startup never destroys data.
+# One-time follow-up on prod: npx prisma migrate resolve --applied 20260906120000_init
+CMD ["sh", "-c", "echo '[boot] applying migrations...' && (npx prisma migrate deploy || (echo '[boot] migrate deploy skipped (existing schema); non-destructive sync' && npx prisma db push --skip-generate)) && echo '[boot] starting server...' && node src/index.js"]

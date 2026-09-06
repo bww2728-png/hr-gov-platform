@@ -269,6 +269,29 @@ const RUNNERS = {
 };
 
 /** GET /api/reports/run/:code */
+const FIN_FIELDS = new Set([
+  'nationalId', 'iban', 'bankAccount', 'salary', 'housingAllowance', 'transportAllowance',
+  'otherAllowances', 'basicSalary', 'gross', 'net', 'gosiEmployee', 'gosiEmployer',
+  'loanDeduct', 'absenceDeduct', 'otherDeduct', 'overtimePay', 'bonusPay',
+]);
+const EXPAT_FIELDS = new Set(['iqamaNumber', 'passportNumber']);
+
+function redactDeep(value, canFin, canExpat) {
+  if (value === null || value === undefined) return value;
+  if (value instanceof Date) return value;
+  if (Array.isArray(value)) return value.map((v) => redactDeep(v, canFin, canExpat));
+  if (typeof value === 'object') {
+    const out = {};
+    for (const [k, v] of Object.entries(value)) {
+      if (FIN_FIELDS.has(k) && !canFin) { out[k] = null; continue; }
+      if (EXPAT_FIELDS.has(k) && !canExpat) { out[k] = null; continue; }
+      out[k] = redactDeep(v, canFin, canExpat);
+    }
+    return out;
+  }
+  return value;
+}
+
 router.get('/run/:code', async (req, res, next) => {
   try {
     const def = CATALOG.find((r) => r.code === req.params.code);
@@ -277,9 +300,11 @@ router.get('/run/:code', async (req, res, next) => {
     if (!perms.includes('*') && !perms.includes(def.perm)) {
       return res.status(403).json({ error: 'ممنوع: لا تملك صلاحية هذا التقرير' });
     }
+    const canFin = perms.includes('*') || perms.includes('hr.employee.read.salary') || perms.includes('payroll.read') || perms.includes('loans.read');
+    const canExpat = perms.includes('*') || perms.includes('expat.iqama.read') || perms.includes('expat.visa.read');
     const runner = RUNNERS[def.code];
     const data = runner ? await runner(req) : { note: 'التقرير قيد الإعداد' };
-    res.json({ report: def, data, generatedAt: new Date() });
+    res.json({ report: def, data: redactDeep(data, canFin, canExpat), generatedAt: new Date() });
   } catch (e) { next(e); }
 });
 
@@ -321,8 +346,11 @@ router.get('/view/:code', reqPerm('hr.employee.read'), async (req, res, next) =>
     if (!def) return res.status(404).json({ error: 'طريقة عرض غير معروفة' });
     const runner = VIEW_RUNNERS[def.code];
     if (!runner) return res.status(501).json({ error: 'غير منفذة بعد' });
+    const perms = Array.isArray(req.user.role?.permissions) ? req.user.role.permissions : [];
+    const canFin = perms.includes('*') || perms.includes('hr.employee.read.salary') || perms.includes('payroll.read');
+    const canExpat = perms.includes('*') || perms.includes('expat.iqama.read') || perms.includes('expat.visa.read');
     const data = await runner(req);
-    res.json({ view: def, data, generatedAt: new Date() });
+    res.json({ view: def, data: redactDeep(data, canFin, canExpat), generatedAt: new Date() });
   } catch (e) { next(e); }
 });
 

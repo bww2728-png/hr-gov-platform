@@ -352,6 +352,7 @@ model Employee {
   transfers       Transfer[]
   promotions      Promotion[]
   qiwaRequests    QiwaRequest[]
+  ledgerEntries   PayrollLedgerEntry[]
   createdAt       DateTime         @default(now()) @map("created_at")
   updatedAt       DateTime         @updatedAt @map("updated_at")
 
@@ -1055,11 +1056,29 @@ model PayrollRun {
   paidAt      DateTime? @map("paid_at")
   wpsFileId   Int?     @map("wps_file_id")
   items       PayrollItem[]
+  ledgerEntries PayrollLedgerEntry[]
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@unique([month, year])
   @@map("payroll_runs")
+}
+
+model PayrollLedgerEntry {
+  id         String     @id @default(uuid())
+  runId      Int        @map("run_id")
+  run        PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  employeeId String     @map("employee_id")
+  employee   Employee   @relation(fields: [employeeId], references: [id])
+  kind       String     // loan_deduction | bonus_payment
+  refId      String?    @map("ref_id")
+  amount     Decimal    @db.Decimal(12, 2)
+  note       String?
+  createdAt  DateTime   @default(now()) @map("created_at")
+
+  @@index([runId])
+  @@index([employeeId])
+  @@map("payroll_ledger_entries")
 }
 
 model PayrollItem {
