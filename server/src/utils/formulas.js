@@ -391,11 +391,32 @@ const KPI = [
 const ALL = [...SALARY, ...SERVICE, ...LEAVE, ...KPI];
 const BY_CODE = Object.fromEntries(ALL.map((f) => [f.code, f]));
 
-/** تنفيذ معادلة برمزها مع مدخلات، يعيد { result, formula } */
+/** تنفيذ معادلة برمزها مع مدخلات، يعيد { result, formula } — يتجاوز لشجرة logicJson من قاعدة البيانات عند وجودها */
 function simulate(code, inputs = {}) {
   const f = BY_CODE[code];
   if (!f) throw new Error(`معادلة غير معروفة: ${code}`);
   return { result: f.compute(inputs), formula: { code: f.code, nameAr: f.nameAr, expressionAr: f.expressionAr } };
+}
+
+/** تنفيذ عبر محرك القواعد الديناميكي: إن وُجدت شجرة logicJson في DB تُنفَّذ، وإلا الدالة الصلبة احتياطاً */
+async function simulateDynamic(code, inputs = {}) {
+  const prisma = require('../prisma');
+  const dsl = require('./formulaDsl');
+  const f = BY_CODE[code];
+  if (!f) throw new Error(`معادلة غير معروفة: ${code}`);
+  const def = await prisma.formulaDefinition.findUnique({
+    where: { code },
+    select: { logicJson: true, variablesJson: true, expressionAr: true, nameAr: true },
+  });
+  if (def?.logicJson) {
+    const allowed = {};
+    for (const v of Array.isArray(def.variablesJson) ? def.variablesJson : []) {
+      if (v && v.key && inputs[v.key] !== undefined) allowed[v.key] = inputs[v.key];
+    }
+    const result = dsl.evaluate(def.logicJson, allowed);
+    return { result, formula: { code, nameAr: def.nameAr, expressionAr: def.expressionAr, engine: 'logicJson' } };
+  }
+  return { ...simulate(code, inputs), engine: 'code' };
 }
 
 /** تعريفات قابلة للزرع في formula_definitions (بدون الدالة) */
@@ -403,4 +424,4 @@ function seedDefinitions() {
   return ALL.map(({ compute, ...rest }) => rest);
 }
 
-module.exports = { ALL, BY_CODE, simulate, seedDefinitions, round2 };
+module.exports = { ALL, BY_CODE, simulate, simulateDynamic, seedDefinitions, round2 };

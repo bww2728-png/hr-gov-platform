@@ -72,6 +72,7 @@ const NAV_SECTIONS = [
       { to: '/transparency', label: 'الشفافية', perm: 'self.profile.read' },
       { to: '/lookup-admin', label: 'إدارة القوائم', perm: 'admin.lookup.write' },
       { to: '/formulas', label: 'مركز المعادلات', perm: 'formulas.read' },
+      { to: '/policy-center', label: 'مركز قواعد وسياسات العمل', perm: 'policies.read' },
       { to: '/approvals', label: 'صندوق الموافقات', perm: 'governance.approve' },
       { to: '/reports', label: 'مركز التقارير', perm: 'reports.hr.read' },
       { to: '/qiwa', label: 'منصة قوى', perm: 'qiwa.read' },

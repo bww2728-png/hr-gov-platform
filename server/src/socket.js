@@ -3,14 +3,18 @@ const config = require('./config');
 const { verifyToken, COOKIE_NAME } = require('./utils/jwt');
 const cookie = require('cookie');
 
+let currentIO = null;
+const getIO = () => currentIO;
+
 /**
  * Socket.IO server for real-time notifications.
- * Emits: audit:new, kpi:updated, compliance:alert, workflow:step
+ * Emits: audit:new, kpi:updated, compliance:alert, workflow:step, public:policies.updated
  */
 function initSocket(server) {
   const io = new Server(server, {
     cors: { origin: config.clientOrigins, credentials: true },
   });
+  currentIO = io;
 
   io.use((socket, next) => {
     try {
@@ -42,4 +46,4 @@ function initSocket(server) {
   return io;
 }
 
-module.exports = { initSocket };
+module.exports = { initSocket, getIO };

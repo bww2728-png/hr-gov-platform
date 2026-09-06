@@ -47,6 +47,7 @@ import Security from './pages/Security';
 import Transparency from './pages/Transparency';
 import LookupAdmin from './pages/LookupAdmin';
 import FormulaCenter from './pages/FormulaCenter';
+import PoliciesCenter from './pages/PoliciesCenter';
 import ApprovalsInbox from './pages/ApprovalsInbox';
 import ReportsCenter from './pages/ReportsCenter';
 import Qiwa from './pages/Qiwa';
@@ -112,6 +113,7 @@ function AppRoutes() {
                 <Route path="/transparency" element={<Transparency />} />
                 <Route path="/lookup-admin" element={<LookupAdmin />} />
                 <Route path="/formulas" element={<FormulaCenter />} />
+                <Route path="/policy-center" element={<PoliciesCenter />} />
                 <Route path="/approvals" element={<ApprovalsInbox />} />
                 <Route path="/reports" element={<ReportsCenter />} />
                 <Route path="/qiwa" element={<Qiwa />} />

@@ -181,6 +181,7 @@ const ROLE_PERMS = {
     // الحوكمة — مدير HR معتمد رئيسي للجداول الفرعية والمعادلات
     'governance.read', 'governance.propose', 'governance.approve',
     'formulas.read', 'formulas.propose', 'formulas.approve',
+    'policies.read', 'policies.propose',
     'qiwa.read', 'qiwa.write',
   ],
 
@@ -205,6 +206,7 @@ const ROLE_PERMS = {
     // الحوكمة — اعتماد المعادلات المالية والقوائم المرتبطة بالرواتب
     'governance.read', 'governance.approve',
     'formulas.read', 'formulas.approve',
+    'policies.read', 'policies.propose',
     'qiwa.read',
   ],
 
@@ -234,6 +236,7 @@ const ROLE_PERMS = {
     // الحوكمة — CEO يعتمد هيكل الرواتب والتغييرات الاستراتيجية
     'governance.read', 'governance.approve',
     'formulas.read', 'formulas.approve',
+    'policies.read',
     'qiwa.read',
   ],
 
@@ -513,6 +516,13 @@ const PERMISSIONS = {
       'read': 'قراءة المعادلات ومحاكاتها (شفافية)',
       'propose': 'اقتراح تعديل معادلة',
       'approve': 'اعتماد تعديل معادلة',
+    },
+  },
+  policies: {
+    nameAr: 'مركز قواعد وسياسات العمل', nameEn: 'Policies Center',
+    actions: {
+      'read': 'قراءة معايير السياسات وقيمها',
+      'propose': 'اقتراح تعديل معامل سياسة',
     },
   },
   qiwa: {
