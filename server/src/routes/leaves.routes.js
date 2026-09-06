@@ -204,11 +204,19 @@ router.post('/requests/:id/manager-decision', requirePerm('leaves.approve', 'req
     const { decision, note } = z.object({ decision: z.enum(['approve', 'reject']), note: z.string().max(500).optional() }).parse(req.body);
     const reqRow = await prisma.leaveRequest.findUnique({ where: { id } });
     if (!reqRow || reqRow.status !== 'pending') return res.status(400).json({ error: 'الطلب ليس بانتظار قرار المدير' });
+    const managerId = selfId(req);
+    const employee = await prisma.employee.findUnique({
+      where: { id: reqRow.employeeId },
+      select: { managerId: true },
+    });
+    if (!managerId || !employee || employee.managerId !== managerId) {
+      return res.status(403).json({ error: 'لا تملك صلاحية اتخاذ قرار لهذا الموظف' });
+    }
     const updated = await prisma.leaveRequest.update({
       where: { id },
       data: {
         status: decision === 'approve' ? 'manager_approved' : 'rejected',
-        managerId: selfId(req),
+        managerId,
         managerNote: note || null,
         decidedAt: decision === 'reject' ? new Date() : null,
       },

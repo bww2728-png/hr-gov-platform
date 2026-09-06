@@ -59,7 +59,7 @@ router.post('/login', async (req, res, next) => {
     res.cookie(COOKIE_NAME, token, {
       httpOnly: true,
       secure: config.cookieSecure,
-      sameSite: config.cookieSecure ? 'none' : 'lax',
+      sameSite: 'lax',
       maxAge: 12 * 60 * 60 * 1000,
     });
 
@@ -83,7 +83,11 @@ router.post('/login', async (req, res, next) => {
 });
 
 router.post('/logout', (req, res) => {
-  res.clearCookie(COOKIE_NAME, { httpOnly: true, sameSite: 'lax' });
+  res.clearCookie(COOKIE_NAME, {
+    httpOnly: true,
+    secure: config.cookieSecure,
+    sameSite: 'lax',
+  });
   audit(req, 'auth.logout');
   res.json({ ok: true });
 });
@@ -127,7 +131,7 @@ router.post('/change-password', authenticate, async (req, res, next) => {
     res.cookie(COOKIE_NAME, token, {
       httpOnly: true,
       secure: config.cookieSecure,
-      sameSite: config.cookieSecure ? 'none' : 'lax',
+      sameSite: 'lax',
       maxAge: 12 * 60 * 60 * 1000,
     });
 

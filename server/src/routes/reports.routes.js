@@ -292,7 +292,7 @@ const VIEW_RUNNERS = {
   T2: async () => prisma.contract.findMany({ include: { employee: { include: { department: true, position: true, section: true } } } }),
   T3: async () => prisma.employee.findMany({
     where: { deletedAt: null },
-    select: { employmentStatus: true, employeeNumber: true, fullNameAr: true, nationalId: true, salary: true, hireDate: true, contractEndDate: true, department: true, section: true, jobCategoryCode: true, nationality: true },
+    select: { employmentStatus: true, employeeNumber: true, fullNameAr: true, hireDate: true, contractEndDate: true, department: true, section: true, jobCategoryCode: true, nationality: true },
   }),
   T4: async () => prisma.employee.findMany({
     where: { deletedAt: null },
@@ -304,7 +304,7 @@ const VIEW_RUNNERS = {
     include: { department: true, section: true, position: true, branch: true, contracts: { where: { status: 'active' }, take: 1 } },
   }),
   T7: async () => prisma.employeeHistory.findMany({ orderBy: { createdAt: 'desc' }, take: 100, include: { employee: { select: { fullNameAr: true } } } }),
-  T8: async () => prisma.transfer.findMany({ include: { employee: { select: { fullNameAr: true, employeeNumber: true, nationalId: true } } } }),
+  T8: async () => prisma.transfer.findMany({ include: { employee: { select: { fullNameAr: true, employeeNumber: true } } } }),
   T9: async () => prisma.contract.findMany({ include: { employee: { include: { department: true, position: true } } }, orderBy: { createdAt: 'desc' } }),
   T10: async () => prisma.employee.findMany({ where: { deletedAt: null }, include: { branch: true, department: true, position: true } }),
   T11: async () => prisma.qiwaRequest.findMany({ include: { employee: { include: { branch: true, department: true, section: true, position: true } } } }),
