@@ -353,4 +353,72 @@ router.put('/settings', authenticate, requirePerm('admin.settings.write'), async
   } catch (e) { next(e); }
 });
 
+// =========== ONE-TIME PRODUCTION BOOTSTRAP (sysadmin only) ===========
+
+const DEMO_USERNAMES = [
+  'admin', 'executive', 'hrdir', 'finance', 'hrmgr', 'recruiter', 'payroll',
+  'lnd', 'manager', 'keeper', 'employee', 'auditor', 'security', 'analyst', 'compliance',
+];
+
+router.post('/bootstrap/production-hardening', authenticate, async (req, res, next) => {
+  try {
+    if (req.user.role?.code !== 'sysadmin') return res.status(403).json({ error: 'ممنوع' });
+    const token = req.get('x-bootstrap-token');
+    const expected = process.env.BOOTSTRAP_TOKEN;
+    if (!expected || !token || token !== expected) return res.status(404).json({ error: 'غير متوفر' });
+    const { adminUsername, adminPassword } = z.object({
+      adminUsername: z.string().min(5).max(50).regex(/^[a-z0-9-]+$/),
+      adminPassword: z.string().min(12).max(200)
+        .regex(/[A-Z]/)
+        .regex(/[a-z]/)
+        .regex(/[0-9]/)
+        .regex(/[^A-Za-z0-9]/),
+    }).parse(req.body);
+    if (DEMO_USERNAMES.includes(adminUsername)) {
+      return res.status(400).json({ error: 'اسم المستخدم محجوز لحساب تجريبي' });
+    }
+
+    const sysRole = await prisma.role.findFirst({ where: { code: 'sysadmin' } });
+    if (!sysRole) return res.status(500).json({ error: 'دور sysadmin غير موجود' });
+
+    const result = await prisma.$transaction(async (tx) => {
+      const disabled = await tx.user.updateMany({
+        where: { username: { in: DEMO_USERNAMES, not: adminUsername }, status: 'active' },
+        data: { status: 'inactive', tokenVersion: { increment: 1 } },
+      });
+      const passwordHash = await bcrypt.hash(adminPassword, 12);
+      const admin = await tx.user.upsert({
+        where: { username: adminUsername },
+        create: {
+          username: adminUsername,
+          fullNameAr: 'مدير المنصة',
+          fullNameEn: 'Platform Admin',
+          passwordHash,
+          roleId: sysRole.id,
+          status: 'active',
+          mustChangePassword: false,
+        },
+        update: {
+          passwordHash,
+          roleId: sysRole.id,
+          status: 'active',
+          mustChangePassword: false,
+          deletedAt: null,
+          tokenVersion: { increment: 1 },
+          failedLoginCount: 0,
+          lockedUntil: null,
+        },
+      });
+      return { disabledDemoUsers: disabled.count, adminId: admin.id };
+    });
+
+    audit(req, 'admin.bootstrap.production', {
+      entityType: 'user',
+      entityId: result.adminId,
+      afterJson: { disabledDemoUsers: result.disabledDemoUsers },
+    });
+    res.json({ ok: true, ...result });
+  } catch (e) { next(e); }
+});
+
 module.exports = router;

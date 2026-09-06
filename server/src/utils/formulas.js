@@ -7,6 +7,7 @@
 const round2 = (n) => Math.round((Number(n) + Number.EPSILON) * 100) / 100;
 const DAYS_IN_MONTH = 30;
 const HOURS_PER_DAY = 8;
+const { calculateEOS } = require('./saudiRules');
 
 // ============================================================
 // 1) حسابات الرواتب (13 معادلة) F01–F13
@@ -74,18 +75,14 @@ const SALARY = [
   {
     code: 'F06', category: 'salary',
     nameAr: 'مكافأة نهاية الخدمة', nameEn: 'End of Service Gratuity',
-    expressionAr: 'أول 5 سنوات: (الراتب الأساسي ÷ 2) × السنوات — بعد 5 سنوات: الراتب الأساسي × السنوات',
+    expressionAr: 'تُحسب عبر المصدر الموحد saudiRules.calculateEOS (نظام العمل السعودي — حالة إنهاء العقد)',
     variables: [
       { key: 'basic', nameAr: 'الراتب الأساسي', example: 5000 },
       { key: 'years', nameAr: 'سنوات الخدمة', example: 3 },
     ],
     example: { inputs: { basic: 5000, years: 3 }, result: 7500 },
-    compute: ({ basic = 0, years = 0 }) => {
-      const y = +years;
-      const first5 = Math.min(y, 5) * (+basic / 2);
-      const rest = Math.max(0, y - 5) * +basic;
-      return round2(first5 + rest);
-    },
+    compute: ({ basic = 0, years = 0 }) =>
+      round2(calculateEOS({ lastSalary: +basic, years: +years, reason: 'termination' }).eosAmount),
   },
   {
     code: 'F07', category: 'salary',

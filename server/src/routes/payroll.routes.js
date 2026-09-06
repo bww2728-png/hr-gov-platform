@@ -140,10 +140,15 @@ router.post('/runs/:id/pay', requirePerm('payroll.approve'), async (req, res, ne
     const run = await prisma.payrollRun.findUnique({ where: { id } });
     if (!run || run.status !== 'approved') return res.status(400).json({ error: 'المسير يحتاج اعتماداً أولاً' });
     const updated = await prisma.$transaction(async (tx) => {
-      const paid = await tx.payrollRun.update({
-        where: { id },
+      const paidRes = await tx.payrollRun.updateMany({
+        where: { id, status: 'approved' },
         data: { status: 'paid', paidAt: new Date() },
       });
+      if (paidRes.count === 0) {
+        const err = new Error('تم الدفع مسبقاً أو الحالة غير صالحة');
+        err.status = 409;
+        throw err;
+      }
       const items = await tx.payrollItem.findMany({ where: { runId: id } });
       for (const item of items) {
         const loans = await tx.loan.findMany({ where: { employeeId: item.employeeId, status: 'active' } });
@@ -156,6 +161,15 @@ router.post('/runs/:id/pay', requirePerm('payroll.approve'), async (req, res, ne
           await tx.loan.update({
             where: { id: loan.id },
             data: { remaining, status: remaining <= 0 ? 'settled' : 'active' },
+          });
+          await tx.payrollLedgerEntry.create({
+            data: {
+              runId: id,
+              employeeId: item.employeeId,
+              kind: 'loan_deduction',
+              refId: loan.id,
+              amount: deduction,
+            },
           });
         }
       }
@@ -171,11 +185,40 @@ router.post('/runs/:id/pay', requirePerm('payroll.approve'), async (req, res, ne
           where: { id: { in: bonuses.map((bonus) => bonus.id) } },
           data: { status: 'paid', payrollRunId: id },
         });
+        for (const bonus of bonuses) {
+          await tx.payrollLedgerEntry.create({
+            data: {
+              runId: id,
+              employeeId: bonus.employeeId,
+              kind: 'bonus_payment',
+              refId: bonus.id,
+              amount: bonus.amount,
+            },
+          });
+        }
       }
-      return paid;
+      return tx.payrollRun.findUnique({ where: { id } });
     });
     audit(req, 'payroll.run.pay', { entityType: 'payroll_run', entityId: String(id) });
     res.json({ run: updated });
+  } catch (e) { next(e); }
+});
+
+router.get('/runs/:id/ledger', requirePerm('payroll.read'), async (req, res, next) => {
+  try {
+    const id = Number(req.params.id);
+    const run = await prisma.payrollRun.findUnique({ where: { id } });
+    if (!run) return res.status(404).json({ error: 'المسير غير موجود' });
+    const entries = await prisma.payrollLedgerEntry.findMany({
+      where: { runId: id },
+      orderBy: { createdAt: 'asc' },
+    });
+    const totals = entries.reduce((acc, e) => {
+      if (e.kind === 'loan_deduction') acc.loanDeductions = D(acc.loanDeductions + Number(e.amount));
+      if (e.kind === 'bonus_payment') acc.bonusPayments = D(acc.bonusPayments + Number(e.amount));
+      return acc;
+    }, { loanDeductions: 0, bonusPayments: 0 });
+    res.json({ run: { id: run.id, code: run.code, status: run.status, paidAt: run.paidAt }, totals, entries });
   } catch (e) { next(e); }
 });
 

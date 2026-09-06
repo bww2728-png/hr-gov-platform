@@ -96,8 +96,8 @@ function sickPayTier(usedDaysThisYear, requestedDays) {
  * إنهاء مشروع: <2 = 0 | 2-5 = نصف×السنوات | >5 = شهر×السنوات
  * تقاعد: استحقاق كامل (نصف×5 + شهر×الباقي)
  */
-function calculateEOS({ hireDate, endDate = new Date(), lastSalary, reason }) {
-  const years = serviceYears(hireDate, endDate);
+function calculateEOS({ hireDate, endDate = new Date(), lastSalary, reason, years: yearsInput }) {
+  const years = yearsInput !== undefined ? Number(yearsInput) : serviceYears(hireDate, endDate);
   const salary = Number(lastSalary) || 0;
   const half = salary / 2;
   let eos = 0;
