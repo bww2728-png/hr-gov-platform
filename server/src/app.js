@@ -57,6 +57,7 @@ function createApp() {
   app.use(cors({
     origin(origin, callback) {
       if (!origin || config.clientOrigins.includes(origin)) return callback(null, true);
+      if (!config.isProd && config.clientOrigins.length === 0) return callback(null, true);
       return callback(new Error('Origin not allowed'));
     },
     credentials: true,
