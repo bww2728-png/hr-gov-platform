@@ -15,79 +15,50 @@ const NAV_SECTIONS = [
     section: 'الموظفون والهيكل',
     items: [
       { to: '/employees', label: 'الموظفون', perm: 'hr.employee.read' },
-      { to: '/employees/new', label: 'إضافة موظف', perm: 'hr.employee.write' },
       { to: '/org-chart', label: 'الهيكل التنظيمي', perm: 'hr.org.read' },
     ],
   },
   {
-    section: 'الاستقطاب',
-    items: [
-      { to: '/recruitment', label: 'الوظائف', perm: 'lifecycle.posting.read' },
-      { to: '/candidates', label: 'المرشحون', perm: 'lifecycle.candidate.read' },
-    ],
-  },
-  {
-    section: 'الخدمة الذاتية والطلبات',
+    section: 'العمليات اليومية',
     items: [
       { to: '/requests', label: 'مركز الطلبات', perm: 'requests.create' },
       { to: '/leaves', label: 'الإجازات', perm: 'self.leave.read' },
       { to: '/attendance', label: 'الحضور', perm: 'self.attendance.read' },
       { to: '/payroll', label: 'الرواتب', perm: 'payroll.read' },
+      { to: '/relations', label: 'تأديب وتظلمات', perm: 'grievances.create' },
+    ],
+  },
+  {
+    section: 'الاستقطاب والتطوير',
+    items: [
+      { to: '/recruitment', label: 'الوظائف والمرشحون', perm: 'lifecycle.posting.read' },
+      { to: '/performance', label: 'الأداء', perm: 'self.profile.read' },
+      { to: '/learning', label: 'التعلم والتطوير', perm: 'lnd.catalog.read' },
+      { to: '/talent', label: 'المواهب والاحتفاظ', perm: 'succession.read' },
     ],
   },
   {
     section: 'شؤون المقيمين',
     items: [
       { to: '/expat', label: 'الإقامات والتأشيرات', perm: 'expat.iqama.read' },
-      { to: '/insurance', label: 'التأمين الصحي', perm: 'insurance.read' },
     ],
   },
   {
-    section: 'الأداء والتطوير',
+    section: 'المعرفة والحوكمة',
     items: [
-      { to: '/performance', label: 'الأداء', perm: 'self.profile.read' },
-      { to: '/learning', label: 'التعلم والتطوير', perm: 'lnd.catalog.read' },
-      { to: '/talent', label: 'المواهب والتعاقب', perm: 'succession.read' },
-      { to: '/retention', label: 'الاحتفاظ', perm: 'surveys.respond' },
-    ],
-  },
-  {
-    section: 'العلاقات العمالية',
-    items: [
-      { to: '/relations', label: 'تأديب وتظلمات', perm: 'grievances.create' },
-    ],
-  },
-  {
-    section: 'المعرفة',
-    items: [
-      { to: '/knowledge', label: 'الوثائق', perm: 'knowledge.doc.read' },
-      { to: '/flowcharts', label: 'مرجع المعاملات', perm: 'knowledge.doc.read' },
-      { to: '/decisions', label: 'سجل القرارات', perm: 'knowledge.decision.read' },
-      { to: '/policies', label: 'السياسات', perm: 'knowledge.policy.read' },
-    ],
-  },
-  {
-    section: 'الحوكمة والامتثال',
-    items: [
+      { to: '/knowledge', label: 'مركز المعرفة', perm: 'knowledge.doc.read' },
+      { to: '/policy-center', label: 'مركز المعايير والقواعد', perm: 'policies.read' },
+      { to: '/compliance', label: 'الامتثال', perm: 'compliance.rule.read' },
+      { to: '/maturity', label: 'مركز التحول', perm: 'maturity.read' },
+      { to: '/workflows', label: 'سير العمل', perm: 'workflow.instance.read' },
       { to: '/transparency', label: 'الشفافية', perm: 'self.profile.read' },
-      { to: '/lookup-admin', label: 'إدارة القوائم', perm: 'admin.lookup.write' },
-      { to: '/formulas', label: 'مركز المعادلات', perm: 'formulas.read' },
-      { to: '/policy-center', label: 'مركز قواعد وسياسات العمل', perm: 'policies.read' },
+    ],
+  },
+  {
+    section: 'الاعتمادات والتقارير',
+    items: [
       { to: '/approvals', label: 'صندوق الموافقات', perm: 'governance.approve' },
       { to: '/reports', label: 'مركز التقارير', perm: 'reports.hr.read' },
-      { to: '/qiwa', label: 'منصة قوى', perm: 'qiwa.read' },
-      { to: '/workflows', label: 'سير العمل', perm: 'workflow.instance.read' },
-      { to: '/compliance', label: 'الامتثال العام', perm: 'compliance.rule.read' },
-      { to: '/compliance-sa', label: 'الامتثال السعودي', perm: 'nitaqat.read' },
-      { to: '/maturity', label: 'قياس النضج', perm: 'maturity.read' },
-      { to: '/roadmap', label: 'خارطة الطريق', perm: 'roadmap.read' },
-      { to: '/risks', label: 'المخاطر', perm: 'risk.read' },
-      { to: '/fivewhys', label: '5 Whys', perm: 'fivewhys.read' },
-    ],
-  },
-  {
-    section: 'التحليلات',
-    items: [
       { to: '/analytics', label: 'التحليلات', perm: 'analytics.read' },
     ],
   },
@@ -97,9 +68,8 @@ const NAV_SECTIONS = [
       { to: '/users', label: 'المستخدمون', perm: 'admin.user.read' },
       { to: '/roles', label: 'الأدوار والصلاحيات', perm: 'admin.role.read' },
       { to: '/security', label: 'الأمن والجلسات', perm: 'security.events.read' },
-      { to: '/integrations', label: 'التكاملات', perm: 'admin.integration.read' },
+      { to: '/system-admin', label: 'الإعدادات النظامية', perm: 'admin.lookup.read' },
       { to: '/audit', label: 'سجل التدقيق', perm: 'admin.audit.read' },
-      { to: '/settings', label: 'الإعدادات', perm: 'self.profile.read' },
     ],
   },
 ];
@@ -197,7 +167,7 @@ export default function Layout({ children }) {
               </button>
               {userMenuOpen && (
                 <div className="absolute end-0 mt-1 w-56 bg-white border border-ink-300 rounded-lg shadow-pop z-30 py-1 animate-fade-in">
-                  <Link to="/profile" className="block px-3 py-2 hover:bg-ink-50 text-sm" onClick={() => setUserMenuOpen(false)}>
+                  <Link to="/my-hub" className="block px-3 py-2 hover:bg-ink-50 text-sm" onClick={() => setUserMenuOpen(false)}>
                     ملفي الشخصي
                   </Link>
                   <Link to="/change-password" className="block px-3 py-2 hover:bg-ink-50 text-sm" onClick={() => setUserMenuOpen(false)}>
