@@ -26,7 +26,7 @@ export default function MyHub() {
 
   function load() {
     client.get('/payroll/payslips/me').then(({ data }) => setPayslips(data.payslips)).catch(() => {});
-    client.get('/leaves/balances/me').then(({ data }) => setBalances(data.balances)).catch(() => {});
+    client.get('/leaves/balances/me').then(({ data }) => setBalances(data.balances || [])).catch(() => {});
     client.get('/leaves/requests').then(({ data }) => setRequests(data.requests.slice(0, 10))).catch(() => {});
     client.get('/lnd/enrollments/me').then(({ data }) => setEnrollments(data.enrollments)).catch(() => {});
     client.get('/insurance/me').then(({ data }) => setInsurance(data.memberships)).catch(() => {});

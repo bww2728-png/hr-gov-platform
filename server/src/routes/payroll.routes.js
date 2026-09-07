@@ -243,7 +243,7 @@ router.get('/runs/:id/items', requirePerm('payroll.read'), async (req, res, next
 router.get('/payslips/me', async (req, res, next) => {
   try {
     const empId = selfId(req);
-    if (!empId) return res.status(400).json({ error: 'لا يوجد ملف موظف مرتبط' });
+    if (!empId) return res.json({ payslips: [] }); // حساب بلا ملف موظف (مثل مدير المنصة)
     const items = await prisma.payrollItem.findMany({
       where: { employeeId: empId, run: { status: { in: ['approved', 'paid'] } } },
       include: { run: true },

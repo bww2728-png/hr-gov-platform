@@ -86,7 +86,7 @@ async function ensureBalances(employeeId, year) {
 router.get('/balances/me', async (req, res, next) => {
   try {
     const empId = selfId(req);
-    if (!empId) return res.status(400).json({ error: 'لا يوجد ملف موظف مرتبط' });
+    if (!empId) return res.json({ balances: null, noEmployeeFile: true }); // حساب بلا ملف موظف
     const year = Number(req.query.year) || new Date().getFullYear();
     const balances = await ensureBalances(empId, year);
     res.json({ balances });
