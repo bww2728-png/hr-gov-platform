@@ -15,7 +15,9 @@ const router = express.Router();
 
 router.get('/users', authenticate, requirePerm('admin.user.read'), async (req, res, next) => {
   try {
+    const includeDeleted = req.query.includeDeleted === '1';
     const users = await prisma.user.findMany({
+      where: includeDeleted ? {} : { deletedAt: null },
       include: {
         role: { select: { code: true, nameAr: true, nameEn: true } },
         employee: { select: { id: true, employeeNumber: true, fullNameAr: true, fullNameEn: true } },
