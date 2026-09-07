@@ -12,21 +12,15 @@ import Employees from './pages/Employees';
 import EmployeeDetail from './pages/EmployeeDetail';
 import EmployeeNew from './pages/EmployeeNew';
 import OrgChart from './pages/OrgChart';
-import Recruitment from './pages/Recruitment';
-import Candidates from './pages/Candidates';
-import Knowledge from './pages/Knowledge';
-import Decisions from './pages/Decisions';
-import Policies from './pages/Policies';
+import KnowledgeHub from './pages/KnowledgeHub';
+import PolicyRulesHub from './pages/PolicyRulesHub';
 import Workflows from './pages/Workflows';
-import Compliance from './pages/Compliance';
-import Maturity from './pages/Maturity';
-import Roadmap from './pages/Roadmap';
-import Risks from './pages/Risks';
-import FiveWhys from './pages/FiveWhys';
+import ComplianceHub from './pages/ComplianceHub';
+import TransformationHub from './pages/TransformationHub';
 import Analytics from './pages/Analytics';
 import Users from './pages/Users';
 import Roles from './pages/Roles';
-import Integrations from './pages/Integrations';
+import SystemAdminHub from './pages/SystemAdminHub';
 import Audit from './pages/Audit';
 import Settings from './pages/Settings';
 import MyHub from './pages/MyHub';
@@ -35,22 +29,15 @@ import Attendance from './pages/Attendance';
 import Payroll from './pages/Payroll';
 import Performance from './pages/Performance';
 import Learning from './pages/Learning';
-import Talent from './pages/Talent';
-import Retention from './pages/Retention';
+import TalentHub from './pages/TalentHub';
 import Relations from './pages/Relations';
-import Expat from './pages/Expat';
-import Insurance from './pages/Insurance';
+import ExpatHub from './pages/ExpatHub';
 import Requests from './pages/Requests';
-import Flowcharts from './pages/Flowcharts';
-import ComplianceSA from './pages/ComplianceSA';
+import RecruitmentHub from './pages/RecruitmentHub';
 import Security from './pages/Security';
 import Transparency from './pages/Transparency';
-import LookupAdmin from './pages/LookupAdmin';
-import FormulaCenter from './pages/FormulaCenter';
-import PoliciesCenter from './pages/PoliciesCenter';
 import ApprovalsInbox from './pages/ApprovalsInbox';
 import ReportsCenter from './pages/ReportsCenter';
-import Qiwa from './pages/Qiwa';
 
 setLang(localStorage.getItem('hr_lang') || 'ar');
 
@@ -74,49 +61,50 @@ function AppRoutes() {
               <Routes>
                 <Route path="/" element={<Dashboard />} />
                 <Route path="/my-hub" element={<MyHub />} />
+                <Route path="/profile" element={<Navigate to="/my-hub" replace />} />
                 <Route path="/employees" element={<Employees />} />
                 <Route path="/employees/new" element={<EmployeeNew />} />
                 <Route path="/employees/:id" element={<EmployeeDetail />} />
                 <Route path="/org-chart" element={<OrgChart />} />
-                <Route path="/recruitment" element={<Recruitment />} />
-                <Route path="/candidates" element={<Candidates />} />
+                <Route path="/recruitment" element={<RecruitmentHub />} />
+                <Route path="/candidates" element={<Navigate to="/recruitment" replace />} />
                 <Route path="/requests" element={<Requests />} />
                 <Route path="/leaves" element={<Leaves />} />
                 <Route path="/attendance" element={<Attendance />} />
                 <Route path="/payroll" element={<Payroll />} />
                 <Route path="/performance" element={<Performance />} />
                 <Route path="/learning" element={<Learning />} />
-                <Route path="/talent" element={<Talent />} />
-                <Route path="/retention" element={<Retention />} />
+                <Route path="/talent" element={<TalentHub />} />
+                <Route path="/retention" element={<Navigate to="/talent" replace />} />
                 <Route path="/relations" element={<Relations />} />
-                <Route path="/expat" element={<Expat />} />
-                <Route path="/insurance" element={<Insurance />} />
-                <Route path="/compliance-sa" element={<ComplianceSA />} />
-                <Route path="/flowcharts" element={<Flowcharts />} />
-                <Route path="/security" element={<Security />} />
-                <Route path="/knowledge" element={<Knowledge />} />
-                <Route path="/decisions" element={<Decisions />} />
-                <Route path="/policies" element={<Policies />} />
+                <Route path="/expat" element={<ExpatHub />} />
+                <Route path="/insurance" element={<Navigate to="/expat" replace />} />
+                <Route path="/qiwa" element={<Navigate to="/expat" replace />} />
+                <Route path="/knowledge" element={<KnowledgeHub />} />
+                <Route path="/policies" element={<Navigate to="/knowledge" replace />} />
+                <Route path="/decisions" element={<Navigate to="/knowledge" replace />} />
+                <Route path="/flowcharts" element={<Navigate to="/knowledge" replace />} />
+                <Route path="/policy-center" element={<PolicyRulesHub />} />
+                <Route path="/formulas" element={<Navigate to="/policy-center" replace />} />
+                <Route path="/compliance" element={<ComplianceHub />} />
+                <Route path="/compliance-sa" element={<Navigate to="/compliance" replace />} />
+                <Route path="/maturity" element={<TransformationHub />} />
+                <Route path="/roadmap" element={<Navigate to="/maturity" replace />} />
+                <Route path="/risks" element={<Navigate to="/maturity" replace />} />
+                <Route path="/fivewhys" element={<Navigate to="/maturity" replace />} />
                 <Route path="/workflows" element={<Workflows />} />
-                <Route path="/compliance" element={<Compliance />} />
-                <Route path="/maturity" element={<Maturity />} />
-                <Route path="/roadmap" element={<Roadmap />} />
-                <Route path="/risks" element={<Risks />} />
-                <Route path="/fivewhys" element={<FiveWhys />} />
+                <Route path="/transparency" element={<Transparency />} />
+                <Route path="/security" element={<Security />} />
                 <Route path="/analytics" element={<Analytics />} />
                 <Route path="/users" element={<Users />} />
                 <Route path="/roles" element={<Roles />} />
-                <Route path="/integrations" element={<Integrations />} />
+                <Route path="/system-admin" element={<SystemAdminHub />} />
+                <Route path="/lookup-admin" element={<Navigate to="/system-admin" replace />} />
+                <Route path="/integrations" element={<Navigate to="/system-admin" replace />} />
                 <Route path="/audit" element={<Audit />} />
                 <Route path="/settings" element={<Settings />} />
-                <Route path="/profile" element={<MyHub />} />
-                <Route path="/transparency" element={<Transparency />} />
-                <Route path="/lookup-admin" element={<LookupAdmin />} />
-                <Route path="/formulas" element={<FormulaCenter />} />
-                <Route path="/policy-center" element={<PoliciesCenter />} />
                 <Route path="/approvals" element={<ApprovalsInbox />} />
                 <Route path="/reports" element={<ReportsCenter />} />
-                <Route path="/qiwa" element={<Qiwa />} />
                 <Route path="*" element={<div className="page"><h1>404</h1><p>الصفحة غير موجودة</p></div>} />
               </Routes>
             </Layout>

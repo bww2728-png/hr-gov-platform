@@ -1,5 +1,5 @@
 /**
- * Permission catalog - 14 roles, ~170 permissions.
+ * Permission catalog - 14 roles, ~215 permissions.
  * Based on spec: انواع المستخدمين وصلاحياتهم + مصفوفة الحوكمة (الوثائق الثلاث).
  */
 
@@ -16,7 +16,7 @@ const ROLES = [
   { code: 'auditor',            nameAr: 'مراقب داخلي',           nameEn: 'Auditor' },
   { code: 'sysadmin',           nameAr: 'مسؤول النظام',          nameEn: 'System Administrator' },
   { code: 'security_admin',     nameAr: 'مسؤول الأمن السيبراني', nameEn: 'Security Admin' },
-  { code: 'data_analyst',       nameAr: 'محلل بيانات',           nameEn: 'Data Analyst' },
+  { code: 'knowledge_keeper',   nameAr: 'أمين المعرفة',          nameEn: 'Knowledge Keeper' },
   { code: 'compliance_officer', nameAr: 'مسؤول امتثال',          nameEn: 'Compliance Officer' },
 ];
 
@@ -283,17 +283,13 @@ const ROLE_PERMS = {
     'admin.audit.read', 'admin.user.read',
   ],
 
-  // ============ 12. محلل البيانات ============
-  data_analyst: [
+  // ============ 12. أمين المعرفة — دور ضيق: إدارة الوثائق والسياسات والقرارات فقط ============
+  knowledge_keeper: [
     'self.profile.read', 'self.profile.write',
-    'analytics.read', 'analytics.custom.write', 'analytics.dashboards.write',
-    'analytics.predict', 'analytics.export',
-    'hr.employee.read', 'hr.org.read',
-    'leaves.read', 'attendance.read', 'payroll.read',
-    'lnd.catalog.read', 'surveys.read', 'retention.read',
-    'maturity.read', 'opex.kpi.read', 'risk.read', 'roadmap.read',
-    'reports.hr.read', 'reports.payroll.read', 'reports.recruitment.read', 'reports.lnd.read',
-    'formulas.read',
+    'requests.create', 'requests.read.self',
+    'knowledge.doc.read', 'knowledge.doc.write', 'knowledge.doc.publish',
+    'knowledge.policy.read', 'knowledge.policy.write',
+    'knowledge.decision.read', 'knowledge.decision.write',
   ],
 
   // ============ 13. مسؤول الامتثال ============
@@ -315,6 +311,9 @@ const ROLE_PERMS = {
     'formulas.read', 'qiwa.read',
   ],
 };
+
+// دور محلل البيانات أُدمج في المراقب الداخلي (auditor) — يُبقى كاسم بديل للتوافق مع الحسابات القديمة حتى إعادة تعيينها
+ROLE_PERMS.data_analyst = ROLE_PERMS.auditor;
 
 // ============================================================
 // Permission catalog grouped by module (للعرض في صفحة الأدوار)
@@ -539,14 +538,16 @@ function listAllCodes() {
   return codes;
 }
 
+// مسؤول النظام: صلاحيات صريحة كاملة من الكتالوج بدل wildcard '*' (مبدأ الامتياز الأدنى وقابلية التدقيق)
+ROLE_PERMS.sysadmin = listAllCodes();
+
 function getDef(code) {
   const [module, action] = code.split('.');
   return PERMISSIONS[module]?.actions?.[action] || null;
 }
 
-/** صلاحيات دور معين (مع دعم '*' لمسؤول النظام) */
+/** صلاحيات دور معين (مسؤول النظام يحصل على القائمة الصريحة الكاملة) */
 function permissionsFor(roleCode) {
-  if (roleCode === 'sysadmin') return ['*'];
   return ROLE_PERMS[roleCode] || [];
 }
 
