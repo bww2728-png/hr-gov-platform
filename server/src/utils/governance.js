@@ -128,7 +128,7 @@ async function proposeParameterChange({ parameterCode, value, effectiveFrom, rea
       beforeJson: { value: (await currentParameterValue(parameterCode)), version: param.version },
       reason: String(reason).trim(),
       proposedBy: user.id,
-      approverRoles: Array.isArray(param.approverRoles) ? param.approverRoles : [],
+      approverChain: Array.isArray(param.approverRoles) ? param.approverRoles : [],
     },
     include: { proposer: { select: { id: true, fullNameAr: true, username: true } } },
   });
@@ -196,7 +196,7 @@ async function proposeLeaveTypeRulesChange({ leaveTypeCode, rules, reason, user 
       beforeJson: { rules: lt.rulesJson },
       reason: String(reason).trim(),
       proposedBy: user.id,
-      approverRoles: ['hr_director', 'ceo'],
+      approverChain: ['hr_director', 'ceo'],
     },
     include: { proposer: { select: { id: true, fullNameAr: true, username: true } } },
   });
