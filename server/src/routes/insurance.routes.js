@@ -82,7 +82,7 @@ router.delete('/members/:id', requirePerm('insurance.write'), async (req, res, n
 router.get('/me', async (req, res, next) => {
   try {
     const empId = selfId(req);
-    if (!empId) return res.status(400).json({ error: 'لا يوجد ملف موظف مرتبط' });
+    if (!empId) return res.json({ memberships: [], noEmployeeFile: true }); // حساب بلا ملف موظف
     const members = await prisma.insuranceMember.findMany({
       where: { employeeId: empId },
       include: { policy: true },
