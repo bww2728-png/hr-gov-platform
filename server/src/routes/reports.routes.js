@@ -73,6 +73,18 @@ router.get('/catalog', async (req, res) => {
 // ---------- منفّذات التقارير ----------
 const selfId = (req) => req.user.employeeId || req.user.employee?.id || null;
 
+/** ربط مصفوفة سجلات (employeeId نصي بلا علاقة Prisma) بأسماء الموظفين */
+async function attachEmployees(rows) {
+  const ids = [...new Set(rows.map((r) => r.employeeId).filter(Boolean))];
+  if (!ids.length) return rows;
+  const emps = await prisma.employee.findMany({
+    where: { id: { in: ids } },
+    select: { id: true, fullNameAr: true, employeeNumber: true },
+  });
+  const map = Object.fromEntries(emps.map((e) => [e.id, e]));
+  return rows.map((r) => ({ ...r, employee: map[r.employeeId] || null }));
+}
+
 const RUNNERS = {
   'FIN-01': async (req) => {
     const perms = Array.isArray(req.user.role?.permissions) ? req.user.role.permissions : [];
@@ -91,7 +103,7 @@ const RUNNERS = {
     const item = await prisma.payrollItem.findFirst({
       where: { employeeId },
       orderBy: { createdAt: 'desc' },
-      include: { run: { select: { code: true, month: true, year: true, status: true, paymentDate: true } } },
+      include: { run: { select: { code: true, month: true, year: true, status: true, paidAt: true } } },
     });
     if (!item) return { note: 'لا توجد مسيرات رواتب لهذا الموظف بعد' };
     if (!subject) {
@@ -120,8 +132,8 @@ const RUNNERS = {
     return { rows: byDept.map((r) => ({ dept: map[r.deptId] || r.deptId, employees: r._count._all, totalSalary: r._sum.salary })) };
   },
   'FIN-05': async () => {
-    const loans = await prisma.loan.findMany({ include: { employee: { select: { fullNameAr: true, employeeNumber: true } } } });
-    return { loans };
+    const loans = await prisma.loan.findMany();
+    return { loans: await attachEmployees(loans) };
   },
   'FIN-06': async () => {
     const agg = await prisma.employee.aggregate({
@@ -152,14 +164,13 @@ const RUNNERS = {
   'OPS-03': async () => {
     const iqamas = await prisma.iqamaRecord.findMany({
       where: { expiryDate: { lte: new Date(Date.now() + 90 * 24 * 3600 * 1000) } },
-      include: { employee: { select: { fullNameAr: true, employeeNumber: true } } },
       orderBy: { expiryDate: 'asc' },
     });
-    return { iqamas };
+    return { iqamas: await attachEmployees(iqamas) };
   },
   'OPS-04': async () => {
-    const visas = await prisma.visa.findMany({ include: { employee: { select: { fullNameAr: true } } }, orderBy: { createdAt: 'desc' } });
-    return { visas };
+    const visas = await prisma.visa.findMany({ orderBy: { createdAt: 'desc' } });
+    return { visas: await attachEmployees(visas) };
   },
   'OPS-05': async () => {
     const employees = await prisma.employee.findMany({
@@ -183,20 +194,26 @@ const RUNNERS = {
   },
   'OPS-08': async () => {
     const today = new Date(); today.setHours(0, 0, 0, 0);
-    const records = await prisma.attendanceRecord.findMany({
-      where: { date: { gte: today } },
-      include: { employee: { select: { fullNameAr: true, employeeNumber: true } } },
-    });
-    return { date: today, records };
+    const records = await prisma.attendanceRecord.findMany({ where: { date: { gte: today } } });
+    return { date: today, records: await attachEmployees(records) };
   },
   'OPS-09': async () => {
-    const overtime = await prisma.overtimeRequest.findMany({ include: { employee: { select: { fullNameAr: true } } }, orderBy: { createdAt: 'desc' } });
-    return { overtime };
+    const overtime = await prisma.overtimeRequest.findMany({ orderBy: { createdAt: 'desc' } });
+    return { overtime: await attachEmployees(overtime) };
   },
   'OPS-10': async () => {
-    const balances = await prisma.leaveBalance.findMany({ include: { employee: { select: { fullNameAr: true } }, leaveType: true } });
-    const requests = await prisma.leaveRequest.findMany({ include: { employee: { select: { fullNameAr: true } }, leaveType: true }, orderBy: { createdAt: 'desc' }, take: 50 });
-    return { balances, requests };
+    const [balances, requests] = await Promise.all([
+      prisma.leaveBalance.findMany({ include: { leaveType: true } }),
+      prisma.leaveRequest.findMany({ orderBy: { createdAt: 'desc' }, take: 50 }),
+    ]);
+    const empIds = [...new Set([...balances.map((b) => b.employeeId), ...requests.map((r) => r.employeeId)])];
+    const emps = await prisma.employee.findMany({
+      where: { id: { in: empIds } },
+      select: { id: true, fullNameAr: true, employeeNumber: true },
+    });
+    const empMap = Object.fromEntries(emps.map((e) => [e.id, e]));
+    const withEmp = (o) => ({ ...o, employee: empMap[o.employeeId] || null });
+    return { balances: balances.map(withEmp), requests: requests.map(withEmp) };
   },
   'OPS-11': async () => {
     const since = new Date(Date.now() - 180 * 24 * 3600 * 1000);
