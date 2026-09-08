@@ -1,0 +1,48 @@
+{
+  "name": "alnaudh-hr-desktop",
+  "version": "1.0.0",
+  "description": "منصة الناضج لإدارة الموارد البشرية — تطبيق سطح المكتب",
+  "main": "main.js",
+  "author": "شركة الناضج",
+  "license": "UNLICENSED",
+  "private": true,
+  "type": "commonjs",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win nsis"
+  },
+  "devDependencies": {
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.alnaudh.hr",
+    "electronDist": "node_modules/electron/dist",
+    "productName": "منصة الناضج",
+    "copyright": "Copyright © 2026 شركة الناضج",
+    "directories": {
+      "output": "release",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "offline.html",
+      "icon.png"
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "build/icon.png"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "منصة الناضج",
+      "runAfterFinish": true,
+      "artifactName": "AlNaudh-HR-Setup-${version}.${ext}"
+    }
+  }
+}

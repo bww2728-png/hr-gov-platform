@@ -1,0 +1,9 @@
+node_modules/
+release/
+build-log.txt
+verify-live.png
+find-locker.ps1
+seed-caches.js
+electron-v44.2.0-win32-x64.zip
+*.exe
+*.blockmap
