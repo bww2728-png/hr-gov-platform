@@ -71,7 +71,37 @@ router.get('/catalog', async (req, res) => {
 });
 
 // ---------- منفّذات التقارير ----------
+const selfId = (req) => req.user.employeeId || req.user.employee?.id || null;
+
 const RUNNERS = {
+  'FIN-01': async (req) => {
+    const perms = Array.isArray(req.user.role?.permissions) ? req.user.role.permissions : [];
+    const canPayroll = perms.includes('*') || perms.includes('payroll.read');
+    let employeeId = selfId(req);
+    let subject = null;
+    if (canPayroll && req.query.employeeNumber) {
+      subject = await prisma.employee.findUnique({
+        where: { employeeNumber: String(req.query.employeeNumber) },
+        select: { id: true, fullNameAr: true, employeeNumber: true, department: { select: { nameAr: true } }, position: { select: { titleAr: true } } },
+      });
+      if (!subject) return { note: 'لا يوجد موظف بهذا الرقم الوظيفي' };
+      employeeId = subject.id;
+    }
+    if (!employeeId) return { note: 'لا يوجد ملف موظف مرتبط بهذا الحساب' };
+    const item = await prisma.payrollItem.findFirst({
+      where: { employeeId },
+      orderBy: { createdAt: 'desc' },
+      include: { run: { select: { code: true, month: true, year: true, status: true, paymentDate: true } } },
+    });
+    if (!item) return { note: 'لا توجد مسيرات رواتب لهذا الموظف بعد' };
+    if (!subject) {
+      subject = await prisma.employee.findUnique({
+        where: { id: employeeId },
+        select: { id: true, fullNameAr: true, employeeNumber: true, department: { select: { nameAr: true } }, position: { select: { titleAr: true } } },
+      });
+    }
+    return { payslip: { employee: subject, run: item.run, earnings: { baseSalary: item.baseSalary, housing: item.housing, transport: item.transport, otherAllow: item.otherAllow, overtimePay: item.overtimePay, bonusPay: item.bonusPay }, deductions: { gosiEmployee: item.gosiEmployee, gosiEmployer: item.gosiEmployer, loanDeduct: item.loanDeduct, absenceDeduct: item.absenceDeduct, otherDeduct: item.otherDeduct }, gross: item.gross, net: item.net, iban: item.iban } };
+  },
   'FIN-02': async () => {
     const runs = await prisma.payrollRun.findMany({
       include: { items: { include: { employee: { select: { fullNameAr: true, employeeNumber: true, department: { select: { nameAr: true } } } } } } },

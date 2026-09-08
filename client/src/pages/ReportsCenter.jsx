@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import client, { errMsg } from '../api/client';
 import { useToast } from '../context/ToastContext';
+import { normalize, label, cell, exportExcel, exportPdf, exportCsv, COMPANY, PLATFORM } from '../utils/exporters';
 
 const CAT_AR = { financial: 'مالية', operational: 'تشغيلية', strategic: 'استراتيجية' };
 const CAT_ORDER = ['financial', 'operational', 'strategic'];
@@ -11,50 +12,52 @@ export default function ReportsCenter() {
   const [views, setViews] = useState([]);
   const [cat, setCat] = useState('financial');
   const [running, setRunning] = useState(null);
+  const [exporting, setExporting] = useState(null);
   const [output, setOutput] = useState(null);
+  const [by, setBy] = useState('');
 
   useEffect(() => {
     client.get('/reports/catalog')
       .then(({ data }) => { setReports(data.reports); setViews(data.views); })
       .catch((e) => toast.error(errMsg(e)));
+    client.get('/auth/me').then(({ data }) => setBy(data.user?.fullNameAr || data.user?.username || '')).catch(() => {});
   }, []);
 
-  function runReport(code) {
+  function run(url, code) {
     setRunning(code);
     setOutput(null);
-    client.get(`/reports/run/${code}`)
-      .then(({ data }) => setOutput({ kind: 'report', ...data }))
+    client.get(url)
+      .then(({ data }) => { setOutput(data); setRunning(null); })
       .catch((e) => { toast.error(errMsg(e)); setRunning(null); });
   }
-  function runView(code) {
-    setRunning(code);
-    setOutput(null);
-    client.get(`/reports/view/${code}`)
-      .then(({ data }) => setOutput({ kind: 'view', ...data }))
-      .catch((e) => { toast.error(errMsg(e)); setRunning(null); });
-  }
+  const runReport = (code) => run(`/reports/run/${code}`, code);
+  const runView = (code) => run(`/reports/view/${code}`, code);
 
-  function exportCsv() {
-    if (!output?.data) return;
-    const rows = Array.isArray(output.data) ? output.data
-      : output.data.employees || output.data.contracts || output.data.requests || output.data.transfers || output.data.promotions || output.data.records || output.data.rows || [];
-    if (!rows.length) return toast.error('لا توجد صفوف للتصدير');
-    const cols = Object.keys(rows[0]).filter((k) => typeof rows[0][k] !== 'object');
-    const csv = [cols.join(','), ...rows.map((r) => cols.map((c) => JSON.stringify(r[c] ?? '')).join(','))].join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${output.report?.code || output.view?.code || 'report'}.csv`;
-    a.click();
+  function doExport(kind) {
+    if (!output) return;
+    const meta = {
+      code: output.report?.code || output.view?.code || 'REPORT',
+      nameAr: output.report?.nameAr || output.view?.nameAr || '',
+      by,
+    };
+    setExporting(kind);
+    const p = kind === 'xlsx' ? exportExcel(meta, output.data)
+      : kind === 'pdf' ? Promise.resolve(exportPdf(meta, output.data))
+      : Promise.resolve(exportCsv(meta, output.data) ? null : Promise.reject(new Error('لا توجد جداول للتصدير CSV')));
+    Promise.resolve(p)
+      .then(() => toast.success(`تم تصدير ${kind === 'xlsx' ? 'ملف Excel' : kind === 'pdf' ? 'ملف PDF' : 'ملف CSV'} بنجاح`))
+      .catch((e) => toast.error('تعذر التصدير: ' + (e?.message || 'خطأ غير متوقع')))
+      .finally(() => setExporting(null));
   }
 
   const shown = reports.filter((r) => r.cat === cat);
+  const sections = output ? normalize(output.data) : [];
 
   return (
     <div className="page space-y-4">
       <div>
         <h1 className="h1">مركز التقارير</h1>
-        <p className="muted">28 تقريراً + 12 طريقة عرض بالأعمدة الموثقة — شركة الناضج.</p>
+        <p className="muted">28 تقريراً + 12 طريقة عرض — تصدير Excel وPDF بهوية {COMPANY}.</p>
       </div>
 
       <div className="flex gap-2 flex-wrap">
@@ -104,70 +107,73 @@ export default function ReportsCenter() {
       )}
 
       {output && (
-        <div className="card-padded space-y-3">
+        <div className="card-padded space-y-4">
           <div className="flex justify-between items-center flex-wrap gap-2">
-            <h2 className="h3">
-              {output.kind === 'report' ? `${output.report.code} — ${output.report.nameAr}` : `${output.view.code} — ${output.view.nameAr}`}
-            </h2>
-            <div className="flex gap-2 items-center">
-              <span className="text-xs text-ink-400">شركة الناضج — {new Date(output.generatedAt).toLocaleString('ar-SA')}</span>
-              <button onClick={exportCsv} className="btn-secondary text-xs">تصدير CSV</button>
+            <div>
+              <h2 className="h3">{output.report ? `${output.report.code} — ${output.report.nameAr}` : `${output.view.code} — ${output.view.nameAr}`}</h2>
+              <div className="text-xs text-ink-400 mt-1">{COMPANY} — {new Date(output.generatedAt).toLocaleString('ar-SA')}</div>
+            </div>
+            <div className="flex gap-2 items-center flex-wrap">
+              <button onClick={() => doExport('xlsx')} disabled={exporting === 'xlsx'} className="btn-primary text-xs">
+                {exporting === 'xlsx' ? 'جاري التصدير…' : 'تصدير Excel'}
+              </button>
+              <button onClick={() => doExport('pdf')} disabled={exporting === 'pdf'} className="btn-primary text-xs">
+                {exporting === 'pdf' ? 'جاري التصدير…' : 'تصدير PDF'}
+              </button>
+              <button onClick={() => doExport('csv')} disabled={exporting === 'csv'} className="btn-secondary text-xs">CSV</button>
               <button onClick={() => setOutput(null)} className="btn-secondary text-xs">إغلاق</button>
             </div>
           </div>
-          <DataTable data={output.data} />
+
+          {sections.map((s, i) => (
+            <div key={i} className="space-y-2">
+              {s.type === 'note' ? (
+                <div className="p-3 rounded-lg bg-ink-50 text-sm text-ink-500">{s.text}</div>
+              ) : s.type === 'kpi' ? (
+                <>
+                  <h3 className="h4">{s.title}</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+                    {s.kpis.map(({ k, v }, j) => (
+                      <div key={j} className="p-3 rounded-lg bg-ink-50">
+                        <div className="text-xs text-ink-500">{k}</div>
+                        <div className="font-bold text-lg">{typeof v === 'number' ? v.toLocaleString('en-US') : String(v)}</div>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="h4">{s.title} <span className="text-xs text-ink-400">({s.rows.length})</span></h3>
+                  <SectionTable section={s} />
+                </>
+              )}
+            </div>
+          ))}
         </div>
       )}
     </div>
   );
 }
 
-function DataTable({ data }) {
-  const rows = Array.isArray(data) ? data
-    : data.employees || data.contracts || data.requests || data.transfers || data.promotions || data.records || data.rows || data.runs || data.loans || data.visas || data.iqamas || data.reviews || null;
-
-  if (!rows) {
-    return (
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
-        {Object.entries(data).filter(([, v]) => typeof v !== 'object').map(([k, v]) => (
-          <div key={k} className="p-3 rounded-lg bg-ink-50">
-            <div className="text-xs text-ink-500">{k}</div>
-            <div className="font-bold text-lg">{String(v)}</div>
-          </div>
-        ))}
-      </div>
-    );
-  }
-  if (!rows.length) return <div className="text-ink-400 text-sm">لا توجد بيانات.</div>;
-
-  const flat = rows.map((r) => {
-    const o = {};
-    for (const [k, v] of Object.entries(r)) {
-      if (v && typeof v === 'object') {
-        if (v.nameAr) o[k] = v.nameAr;
-        else if (v.fullNameAr) o[k] = v.fullNameAr;
-        else if (v.titleAr) o[k] = v.titleAr;
-      } else if (typeof v === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(v)) {
-        o[k] = new Date(v).toLocaleDateString('ar-SA');
-      } else if (typeof v !== 'object') {
-        o[k] = v;
-      }
-    }
-    return o;
-  });
-  const cols = Object.keys(flat[0]).slice(0, 12);
-
+function SectionTable({ section }) {
+  const cols = [];
+  for (const r of section.rows) for (const k of Object.keys(r)) if (!cols.includes(k) && cols.length < 40) cols.push(k);
+  if (!cols.length) return <div className="text-ink-400 text-sm">لا توجد بيانات.</div>;
   return (
     <div className="table-wrap max-h-[60vh] overflow-auto">
       <table className="text-xs">
-        <thead><tr>{cols.map((c) => <th key={c}>{c}</th>)}</tr></thead>
+        <thead><tr>{cols.map((c) => <th key={c}>{label(c)}</th>)}</tr></thead>
         <tbody>
-          {flat.slice(0, 200).map((r, i) => (
-            <tr key={i}>{cols.map((c) => <td key={c}>{r[c] == null ? '—' : String(r[c])}</td>)}</tr>
+          {section.rows.slice(0, 200).map((r, i) => (
+            <tr key={i}>{cols.map((c) => (
+              <td key={c} className={typeof r[c] === 'number' ? 'font-semibold' : ''}>
+                {typeof r[c] === 'number' ? r[c].toLocaleString('en-US') : String(cell(r[c]))}
+              </td>
+            ))}</tr>
           ))}
         </tbody>
       </table>
-      {flat.length > 200 && <div className="text-xs text-ink-400 p-2">يعرض أول 200 صف من {flat.length}</div>}
+      {section.rows.length > 200 && <div className="text-xs text-ink-400 p-2">يعرض أول 200 صف من {section.rows.length}</div>}
     </div>
   );
 }
