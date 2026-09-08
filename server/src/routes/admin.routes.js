@@ -70,13 +70,23 @@ router.patch('/users/:id', authenticate, requirePerm('admin.user.write'), async 
 
 router.post('/users/:id/reset-password', authenticate, requirePerm('admin.user.write'), async (req, res, next) => {
   try {
-    const { newPassword } = z.object({ newPassword: z.string().min(8).max(200) }).parse(req.body);
+    const { newPassword, temporary } = z
+      .object({ newPassword: z.string().min(1).max(200), temporary: z.boolean().optional() })
+      .parse(req.body);
+    // الوضع الدائم (الافتراضي) يفرض الحد الأدنى 8 أحرف؛ الوضع المؤقت يسمح بكلمة قصيرة للاختبار
+    if (!temporary && newPassword.length < 8) {
+      return res.status(400).json({ error: 'كلمة المرور يجب أن تكون 8 أحرف على الأقل' });
+    }
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await prisma.user.update({
       where: { id: req.params.id },
-      data: { passwordHash, mustChangePassword: true, tokenVersion: { increment: 1 } },
+      data: { passwordHash, mustChangePassword: temporary ? false : true, tokenVersion: { increment: 1 } },
     });
-    audit(req, 'admin.user.reset_password', { entityType: 'user', entityId: req.params.id });
+    audit(req, temporary ? 'admin.user.reset_password_temporary' : 'admin.user.reset_password', {
+      entityType: 'user',
+      entityId: req.params.id,
+      meta: { temporary: !!temporary, length: newPassword.length },
+    });
     res.json({ ok: true });
   } catch (e) { next(e); }
 });
