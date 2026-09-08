@@ -116,10 +116,12 @@ const RUNNERS = {
   },
   'FIN-02': async () => {
     const runs = await prisma.payrollRun.findMany({
-      include: { items: { include: { employee: { select: { fullNameAr: true, employeeNumber: true, department: { select: { nameAr: true } } } } } } },
       orderBy: [{ year: 'desc' }, { month: 'desc' }], take: 3,
+      include: { items: true },
     });
-    return { runs };
+    const attached = await attachEmployees(runs.flatMap((r) => r.items));
+    const byId = new Map(attached.map((i) => [i.id, i]));
+    return { runs: runs.map((r) => ({ ...r, items: r.items.map((i) => byId.get(i.id)) })) };
   },
   'FIN-04': async () => {
     const byDept = await prisma.employee.groupBy({
@@ -162,9 +164,10 @@ const RUNNERS = {
     return { contracts, withinDays: 90 };
   },
   'OPS-03': async () => {
+    const soon = new Date(Date.now() + 90 * 24 * 3600 * 1000);
     const iqamas = await prisma.iqamaRecord.findMany({
-      where: { expiryDate: { lte: new Date(Date.now() + 90 * 24 * 3600 * 1000) } },
-      orderBy: { expiryDate: 'asc' },
+      where: { expiresAt: { lte: soon } },
+      orderBy: { expiresAt: 'asc' },
     });
     return { iqamas: await attachEmployees(iqamas) };
   },
@@ -287,9 +290,9 @@ const RUNNERS = {
   },
   'STR-04': async () => {
     const objectives = await prisma.objective.count();
-    const completed = await prisma.keyResult.count({ where: { status: 'completed' } });
-    const krs = await prisma.keyResult.count();
-    return { objectives, keyResultsCompleted: completed, keyResultsTotal: krs, completionPct: krs ? Math.round((completed / krs) * 100) : 0 };
+    const krs = await prisma.keyResult.findMany({ select: { targetValue: true, currentValue: true } });
+    const completed = krs.filter((k) => Number(k.currentValue) >= Number(k.targetValue)).length;
+    return { objectives, keyResultsCompleted: completed, keyResultsTotal: krs.length, completionPct: krs.length ? Math.round((completed / krs.length) * 100) : 0 };
   },
   'STR-05': async () => {
     const plans = await prisma.successionPlan.findMany({ include: { candidates: true } });
