@@ -62,8 +62,7 @@ export default function Login() {
     if (!q) return userList;
     return userList.filter((u) =>
       u.username?.toLowerCase().includes(q) ||
-      u.fullNameAr?.toLowerCase().includes(q) ||
-      u.roleName?.toLowerCase().includes(q)
+      u.fullNameAr?.toLowerCase().includes(q)
     );
   }, [userList, username]);
 
@@ -177,10 +176,9 @@ export default function Login() {
                         className={`w-full text-right px-3 py-2 transition ${i === hi ? 'bg-primary-50' : 'bg-white hover:bg-primary-50'}`}
                         disabled={!!submitting}
                       >
-                        <div className="text-sm font-medium text-ink-900">{u.fullNameAr || u.username}</div>
-                        <div className="text-[11px] text-ink-500 flex justify-between gap-2">
-                          <span>{u.roleName || ''}</span>
-                          <span className="font-mono" dir="ltr">{u.username}</span>
+                        <div className="w-full flex items-center justify-between gap-3">
+                          <span className="text-sm font-medium text-ink-900">{u.fullNameAr || u.username}</span>
+                          <span className="text-[11px] font-mono text-ink-500" dir="ltr">{u.username}</span>
                         </div>
                       </button>
                     </li>
