@@ -15,6 +15,7 @@ const NAV_SECTIONS = [
     section: 'الموظفون والهيكل',
     items: [
       { to: '/employees', label: 'الموظفون', perm: 'hr.employee.read' },
+      { to: '/employees/credentials', label: 'كلمات مرور الموظفين', perm: 'hr.employee.write' },
       { to: '/org-chart', label: 'الهيكل التنظيمي', perm: 'hr.org.read' },
     ],
   },

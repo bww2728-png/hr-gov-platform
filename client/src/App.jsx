@@ -11,6 +11,7 @@ import Dashboard from './pages/Dashboard';
 import Employees from './pages/Employees';
 import EmployeeDetail from './pages/EmployeeDetail';
 import EmployeeNew from './pages/EmployeeNew';
+import EmployeeCredentials from './pages/EmployeeCredentials';
 import OrgChart from './pages/OrgChart';
 import KnowledgeHub from './pages/KnowledgeHub';
 import PolicyRulesHub from './pages/PolicyRulesHub';
@@ -64,6 +65,7 @@ function AppRoutes() {
                 <Route path="/profile" element={<Navigate to="/my-hub" replace />} />
                 <Route path="/employees" element={<Employees />} />
                 <Route path="/employees/new" element={<EmployeeNew />} />
+                <Route path="/employees/credentials" element={<EmployeeCredentials />} />
                 <Route path="/employees/:id" element={<EmployeeDetail />} />
                 <Route path="/org-chart" element={<OrgChart />} />
                 <Route path="/recruitment" element={<RecruitmentHub />} />

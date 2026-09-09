@@ -144,6 +144,8 @@ model User {
   employee           Employee?       @relation(fields: [employeeId], references: [id])
   status             UserStatus      @default(active)
   mustChangePassword Boolean         @default(true) @map("must_change_password")
+  initialPasswordEnc String?         @map("initial_password_enc")
+  passwordIssuedAt   DateTime?       @map("password_issued_at")
   mfaEnabled         Boolean         @default(false) @map("mfa_enabled")
   tokenVersion       Int             @default(0) @map("token_version")
   lastLoginAt        DateTime?       @map("last_login_at")

@@ -80,7 +80,7 @@ router.post('/users/:id/reset-password', authenticate, requirePerm('admin.user.w
     const passwordHash = await bcrypt.hash(newPassword, 10);
     await prisma.user.update({
       where: { id: req.params.id },
-      data: { passwordHash, mustChangePassword: temporary ? false : true, tokenVersion: { increment: 1 } },
+      data: { passwordHash, mustChangePassword: temporary ? false : true, tokenVersion: { increment: 1 }, initialPasswordEnc: null, passwordIssuedAt: null },
     });
     audit(req, temporary ? 'admin.user.reset_password_temporary' : 'admin.user.reset_password', {
       entityType: 'user',
