@@ -1,9 +1,10 @@
 /**
- * محرك التصدير الفاخر — Excel (exceljs) + PDF (html2pdf.js)
+ * محرك التصدير الفاخر — Excel (exceljs) + PDF (html2canvas + jsPDF)
  * هوية موحدة: شركة الناضج — RTL — عربية مشكّلة مثالية.
  */
 import ExcelJS from 'exceljs';
-import html2pdf from 'html2pdf.js';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 export const COMPANY = 'شركة الناضج';
 export const PLATFORM = 'منصة الناضج لإدارة الموارد البشرية';
@@ -285,9 +286,11 @@ export async function exportPdf(meta, data) {
 
   // طبقة تغطية + حاوية داخل نطاق العرض (إلغاء النمط خارج الشاشة الذي يُنتج canvas فارغاً)
   const overlay = document.createElement('div');
+  overlay.className = '__pdf-overlay';
   overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;font-family:Tahoma,sans-serif;';
   overlay.innerHTML = '<div style="width:42px;height:42px;border:4px solid #C7D2FE;border-top-color:#4338CA;border-radius:50%;animation:__pdfspin 1s linear infinite"></div><div style="color:#312E81;font-weight:700">جاري توليد ملف PDF...</div>';
   const style = document.createElement('style');
+  style.className = '__pdf-overlay-style';
   style.textContent = '@keyframes __pdfspin{to{transform:rotate(360deg)}}';
   document.head.appendChild(style);
 
@@ -299,14 +302,29 @@ export async function exportPdf(meta, data) {
   document.body.appendChild(el);
   try {
     await new Promise((r) => setTimeout(r, 60)); // فرصة للعرض قبل الالتقاط
-    await html2pdf().set({
-      margin: [8, 8, 10, 8],
-      filename: `${meta.code}-${stamp}.pdf`,
-      image: { type: 'jpeg', quality: 0.96 },
-      html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0, windowWidth: 900 },
-      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-      pagebreak: { mode: ['css', 'legacy'], avoid: '.avoid' },
-    }).from(el).save();
+    // html2canvas + jsPDF مباشرة (مسار حزمة html2pdf ينتج canvas فارغاً في بيئة المتصفح الحالية)
+    const canvas = await html2canvas(el, {
+      scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0,
+      ignoreElements: (node) => (typeof node.className === 'string' ? node.className.includes('__pdf-overlay') : false),
+    });
+    const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait' });
+    const pageW = 210, pageH = 297, mX = 8, mT = 8, mB = 10;
+    const imgW = pageW - mX * 2;
+    const pageImgH = pageH - mT - mB;
+    const sliceHpx = Math.floor(canvas.width * pageImgH / imgW);
+    let y = 0, pno = 0;
+    while (y < canvas.height) {
+      const h = Math.min(sliceHpx, canvas.height - y);
+      const slice = document.createElement('canvas');
+      slice.width = canvas.width; slice.height = h;
+      const ctx = slice.getContext('2d');
+      ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, slice.width, slice.height);
+      ctx.drawImage(canvas, 0, y, canvas.width, h, 0, 0, canvas.width, h);
+      if (pno > 0) pdf.addPage();
+      pdf.addImage(slice.toDataURL('image/jpeg', 0.95), 'JPEG', mX, mT, imgW, h * imgW / canvas.width);
+      y += h; pno++;
+    }
+    pdf.save(`${meta.code}-${stamp}.pdf`);
   } finally {
     el.remove();
     overlay.remove();
