@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
-import { errMsg } from '../api/client';
+import client, { errMsg } from '../api/client';
 import { setLang, getLang, t } from '../i18n';
 
 // الدخول السريع التجريبي: يظهر فقط عند VITE_DEMO_MODE=true (بيئات العرض التجريبي)
@@ -35,6 +35,61 @@ export default function Login() {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
+  const [userList, setUserList] = useState([]);
+  const [ddOpen, setDdOpen] = useState(false);
+  const [hi, setHi] = useState(-1);
+  const userWrapRef = useRef(null);
+  const pwdRef = useRef(null);
+
+  useEffect(() => {
+    let alive = true;
+    client.get('/auth/usernames')
+      .then((r) => { if (alive) setUserList(Array.isArray(r.data?.users) ? r.data.users : []); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, []);
+
+  useEffect(() => {
+    function onDocClick(e) {
+      if (userWrapRef.current && !userWrapRef.current.contains(e.target)) setDdOpen(false);
+    }
+    document.addEventListener('mousedown', onDocClick);
+    return () => document.removeEventListener('mousedown', onDocClick);
+  }, []);
+
+  const filteredUsers = useMemo(() => {
+    const q = username.trim().toLowerCase();
+    if (!q) return userList;
+    return userList.filter((u) =>
+      u.username?.toLowerCase().includes(q) ||
+      u.fullNameAr?.toLowerCase().includes(q) ||
+      u.roleName?.toLowerCase().includes(q)
+    );
+  }, [userList, username]);
+
+  function pickUser(u) {
+    setUsername(u.username);
+    setDdOpen(false);
+    setHi(-1);
+    if (pwdRef.current) pwdRef.current.focus();
+  }
+
+  function onUsernameKeyDown(e) {
+    if (!ddOpen || filteredUsers.length === 0) return;
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      setHi((h) => (h + 1) % filteredUsers.length);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      setHi((h) => (h <= 0 ? filteredUsers.length - 1 : h - 1));
+    } else if (e.key === 'Enter' && hi >= 0 && hi < filteredUsers.length) {
+      e.preventDefault();
+      pickUser(filteredUsers[hi]);
+    } else if (e.key === 'Escape') {
+      setDdOpen(false);
+      setHi(-1);
+    }
+  }
 
   async function submit(e) {
     e.preventDefault();
@@ -87,7 +142,7 @@ export default function Login() {
             </button>
           </div>
           <form onSubmit={submit} className="space-y-3">
-            <div>
+            <div ref={userWrapRef} className="relative">
               <label htmlFor="login-username" className="block text-sm font-medium mb-1">اسم المستخدم</label>
               <input
                 id="login-username"
@@ -96,15 +151,48 @@ export default function Login() {
                 dir="ltr"
                 className="input w-full"
                 value={username}
-                onChange={(e) => setUsername(e.target.value)}
+                onChange={(e) => { setUsername(e.target.value); setDdOpen(true); setHi(-1); }}
+                onMouseDown={() => setDdOpen(true)}
+                onFocus={() => setDdOpen(true)}
+                onKeyDown={onUsernameKeyDown}
                 disabled={!!submitting}
+                role="combobox"
+                aria-expanded={ddOpen}
+                aria-controls="login-userlist"
+                aria-autocomplete="list"
                 autoFocus
               />
+              {ddOpen && filteredUsers.length > 0 && (
+                <ul
+                  id="login-userlist"
+                  role="listbox"
+                  className="absolute z-40 mt-1 w-full max-h-64 overflow-y-auto rounded-xl border border-ink-200 bg-white shadow-pop py-1"
+                >
+                  {filteredUsers.map((u, i) => (
+                    <li key={u.username} role="option" aria-selected={i === hi}>
+                      <button
+                        type="button"
+                        onMouseDown={(e) => { e.preventDefault(); pickUser(u); }}
+                        onMouseEnter={() => setHi(i)}
+                        className={`w-full text-right px-3 py-2 transition ${i === hi ? 'bg-primary-50' : 'bg-white hover:bg-primary-50'}`}
+                        disabled={!!submitting}
+                      >
+                        <div className="text-sm font-medium text-ink-900">{u.fullNameAr || u.username}</div>
+                        <div className="text-[11px] text-ink-500 flex justify-between gap-2">
+                          <span>{u.roleName || ''}</span>
+                          <span className="font-mono" dir="ltr">{u.username}</span>
+                        </div>
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
             <div>
               <label htmlFor="login-password" className="block text-sm font-medium mb-1">كلمة المرور</label>
               <div className="relative">
                 <input
+                  ref={pwdRef}
                   id="login-password"
                   type={showPwd ? 'text' : 'password'}
                   autoComplete="current-password"
@@ -123,7 +211,7 @@ export default function Login() {
                 >{showPwd ? 'إخفاء' : 'إظهار'}</button>
               </div>
             </div>
-            <button type="submit" className="btn-primary w-full" disabled={!!submitting}>
+            <button type="submit" className="btn-primary mx-auto block min-w-[12rem]" disabled={!!submitting}>
               {submitting === '__form__' ? 'جاري الدخول...' : 'دخول'}
             </button>
           </form>
