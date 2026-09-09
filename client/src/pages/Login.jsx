@@ -99,7 +99,7 @@ export default function Login() {
     try {
       const u = await login(username.trim(), password);
       toast.success('مرحباً ' + (u.fullNameAr || u.username));
-      nav('/');
+      nav(u?.mustChangePassword ? '/change-password' : '/');
     } catch (err) {
       toast.error(errMsg(err));
       setSubmitting(null);

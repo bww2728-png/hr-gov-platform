@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import client from '../api/client';
 import { useToast } from '../context/ToastContext';
 import { SmartSelect } from '../components/fields/SmartSelect';
@@ -28,6 +28,7 @@ export default function EmployeeNew() {
   }, []);
 
   const set = (k, v) => setForm((f) => ({ ...f, [k]: v }));
+  const [createdCreds, setCreatedCreds] = useState(null);
 
   function submit(e) {
     e.preventDefault();
@@ -36,8 +37,42 @@ export default function EmployeeNew() {
       branchId: Number(form.branchId), deptId: Number(form.deptId), positionId: Number(form.positionId),
       managerId: form.managerId || null, salary: Number(form.salary) || 0,
       dobGregorian: form.dobGregorian || null,
-    }).then(() => { toast.success('تم إنشاء الموظف بنجاح'); nav('/employees'); })
+    }).then(({ data }) => {
+      toast.success('تم إنشاء الموظف وحساب الدخول بنجاح');
+      setCreatedCreds(data.credentials || null);
+    })
       .catch((err) => toast.error(err.response?.data?.error || 'فشل الإنشاء'));
+  }
+
+  if (createdCreds) {
+    return (
+      <div className="page space-y-4 max-w-xl">
+        <h1 className="h1">تم إنشاء الموظف بنجاح</h1>
+        <div className="card-padded space-y-3 border-2 border-green-200">
+          <h2 className="h3">بيانات الدخول المولّدة</h2>
+          <p className="muted text-sm">احفظها الآن وسلّمها للموظف — وستبقى متاحة أيضاً في <Link to="/employees/credentials" className="text-primary-600 hover:underline">تقرير كلمات المرور</Link>. سيدخل الموظف نظاماً بتغيير كلمة السر في أول تسجيل دخول.</p>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="rounded-xl bg-ink-50 p-3">
+              <div className="muted text-xs mb-1">اسم الدخول</div>
+              <div className="font-mono text-lg font-bold" dir="ltr">{createdCreds.username}</div>
+            </div>
+            <div className="rounded-xl bg-ink-50 p-3">
+              <div className="muted text-xs mb-1">كلمة السر</div>
+              <div className="font-mono text-lg font-bold" dir="ltr">{createdCreds.password}</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn-secondary text-sm"
+            onClick={() => navigator.clipboard.writeText(`اسم الدخول: ${createdCreds.username}\nكلمة السر: ${createdCreds.password}`).then(() => toast.success('نُسخت بيانات الدخول'))}
+          >نسخ بيانات الدخول</button>
+        </div>
+        <div className="flex gap-2">
+          <Link to="/employees" className="btn-primary">قائمة الموظفين</Link>
+          <Link to="/employees/new" className="btn-secondary">إضافة موظف آخر</Link>
+        </div>
+      </div>
+    );
   }
 
   return (

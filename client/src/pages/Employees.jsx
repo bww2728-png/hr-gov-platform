@@ -4,6 +4,7 @@ import client, { errMsg } from '../api/client';
 import { useAuth } from '../context/AuthContext';
 import { useToast } from '../context/ToastContext';
 import { SmartSelect } from '../components/fields/SmartSelect';
+import ImportEmployeesModal from '../components/ImportEmployeesModal';
 
 export default function Employees() {
   const { has } = useAuth();
@@ -16,6 +17,7 @@ export default function Employees() {
   const [statusFilter, setStatusFilter] = useState(null);
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [importOpen, setImportOpen] = useState(false);
 
   useEffect(() => {
     client.get('/hr/branches').then(({ data }) => setBranches(data.branches));
@@ -51,9 +53,18 @@ export default function Employees() {
           <p className="muted">{list.length} موظف</p>
         </div>
         {has('hr.employee.write') && (
-          <Link to="/employees/new" className="btn-primary">+ إضافة موظف</Link>
+          <div className="flex gap-2">
+            <button type="button" className="btn-secondary" onClick={() => setImportOpen(true)}>⬆ استيراد من Excel</button>
+            <Link to="/employees/new" className="btn-primary">+ إضافة موظف</Link>
+          </div>
         )}
       </div>
+
+      <ImportEmployeesModal
+        open={importOpen}
+        onClose={() => setImportOpen(false)}
+        onDone={() => load()}
+      />
 
       <div className="card-padded flex flex-wrap gap-3 items-end">
         <div className="flex-1 min-w-[200px]">
