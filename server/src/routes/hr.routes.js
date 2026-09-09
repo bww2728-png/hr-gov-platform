@@ -22,8 +22,13 @@ const normAr = (s) =>
     .replace(/\s+/g, ' ')
     .trim();
 
-const CONTRACT_MAP = { 'دوام كامل': 'full_time', 'دوام جزئي': 'part_time', 'عقد': 'contract', 'متدرب': 'intern', 'مستشار': 'consultant' };
-const GENDER_MAP = { 'ذكر': 'M', 'انثى': 'F', 'أنثى': 'F' };
+const CONTRACT_MAP = Object.fromEntries([
+  ['دوام كامل', 'full_time'], ['دوام جزئي', 'part_time'], ['عقد', 'contract'],
+  ['متدرب', 'intern'], ['مستشار', 'consultant'],
+].map(([k, v]) => [normAr(k), v]));
+const GENDER_MAP = Object.fromEntries([
+  ['ذكر', 'M'], ['أنثى', 'F'], ['انثى', 'F'],
+].map(([k, v]) => [normAr(k), v]));
 
 async function getEmployeeRole() {
   return prisma.role.findUnique({ where: { code: 'employee' } });
