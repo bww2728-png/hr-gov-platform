@@ -62,7 +62,7 @@ export default function Login() {
     if (!q) return userList;
     return userList.filter((u) =>
       u.username?.toLowerCase().includes(q) ||
-      u.fullNameAr?.toLowerCase().includes(q)
+      u.roleName?.toLowerCase().includes(q)
     );
   }, [userList, username]);
 
@@ -177,7 +177,7 @@ export default function Login() {
                         disabled={!!submitting}
                       >
                         <div className="w-full flex items-center justify-between gap-3">
-                          <span className="text-sm font-medium text-ink-900">{u.fullNameAr || u.username}</span>
+                          <span className="text-sm font-medium text-ink-900">{u.roleName || '—'}</span>
                           <span className="text-[11px] font-mono text-ink-500" dir="ltr">{u.username}</span>
                         </div>
                       </button>

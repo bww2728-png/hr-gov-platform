@@ -233,7 +233,7 @@ export async function exportExcel(meta, data) {
 }
 
 // ---------- PDF ----------
-export function exportPdf(meta, data) {
+export async function exportPdf(meta, data) {
   const sections = normalize(data);
   const stamp = new Date().toISOString().slice(0, 10);
   const esc = (v) => String(v ?? '').replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
@@ -246,7 +246,7 @@ export function exportPdf(meta, data) {
     const { cols, rows } = sectionRowsFlat(s);
     const shown = rows.slice(0, 120);
     return `<h2 class="avoid">${esc(s.title)} <span class="cnt">(${rows.length})</span></h2>
-      <table class="avoid"><thead><tr>${cols.map((c) => `<th>${esc(label(c))}</th>`).join('')}</tr></thead>
+      <table><thead class="avoid"><tr>${cols.map((c) => `<th>${esc(label(c))}</th>`).join('')}</tr></thead>
       <tbody>${shown.map((row, i) => `<tr class="${i % 2 ? 'z' : ''}">${cols.map((c) => {
         const f = fmtVal(row[c], c);
         return `<td class="${f ? 'num' : ''}">${esc(f ? f.num.toLocaleString('en-US', { minimumFractionDigits: f.money ? 2 : 0 }) : cell(row[c]))}</td>`;
@@ -276,25 +276,42 @@ export function exportPdf(meta, data) {
     tr.z td { background: #EEF2FF; }
     .foot { margin-top: 14px; padding-top: 6px; border-top: 1px solid #E5E7EB; color: #9CA3AF; font-size: 9px; text-align: center; }
   </style></head><body>
-    <div class="head"><div class="co">${COMPANY}</div><div class="pf">${PLATFORM}</div>
+    <div class="head avoid"><div class="co">${COMPANY}</div><div class="pf">${PLATFORM}</div>
       <div class="rt">${esc(meta.code)} — ${esc(meta.nameAr)}</div>
       <div class="mt">تاريخ التوليد: ${stamp}${meta.by ? `  |  المُصدِّر: ${esc(meta.by)}` : ''}</div></div>
     ${secHtml}
     <div class="foot">${COMPANY} — وثيقة مولدة آلياً من ${PLATFORM}</div>
   </body></html>`;
 
+  // طبقة تغطية + حاوية داخل نطاق العرض (إلغاء النمط خارج الشاشة الذي يُنتج canvas فارغاً)
+  const overlay = document.createElement('div');
+  overlay.style.cssText = 'position:fixed;inset:0;z-index:99998;background:#fff;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:12px;font-family:Tahoma,sans-serif;';
+  overlay.innerHTML = '<div style="width:42px;height:42px;border:4px solid #C7D2FE;border-top-color:#4338CA;border-radius:50%;animation:__pdfspin 1s linear infinite"></div><div style="color:#312E81;font-weight:700">جاري توليد ملف PDF...</div>';
+  const style = document.createElement('style');
+  style.textContent = '@keyframes __pdfspin{to{transform:rotate(360deg)}}';
+  document.head.appendChild(style);
+
   const el = document.createElement('div');
-  el.style.cssText = 'position:fixed;left:-10000px;top:0;width:794px;background:#fff;';
+  el.style.cssText = 'position:absolute;top:0;left:0;width:794px;background:#fff;z-index:1;';
   el.innerHTML = html;
+
+  document.body.appendChild(overlay);
   document.body.appendChild(el);
-  return html2pdf().set({
-    margin: [8, 8, 10, 8],
-    filename: `${meta.code}-${stamp}.pdf`,
-    image: { type: 'jpeg', quality: 0.96 },
-    html2canvas: { scale: 2, useCORS: true, letterRendering: true },
-    jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-    pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
-  }).from(el).save().then(() => { setTimeout(() => el.remove(), 500); });
+  try {
+    await new Promise((r) => setTimeout(r, 60)); // فرصة للعرض قبل الالتقاط
+    await html2pdf().set({
+      margin: [8, 8, 10, 8],
+      filename: `${meta.code}-${stamp}.pdf`,
+      image: { type: 'jpeg', quality: 0.96 },
+      html2canvas: { scale: 2, useCORS: true, letterRendering: true, backgroundColor: '#ffffff', scrollX: 0, scrollY: 0, windowWidth: 900 },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+      pagebreak: { mode: ['css', 'legacy'], avoid: '.avoid' },
+    }).from(el).save();
+  } finally {
+    el.remove();
+    overlay.remove();
+    style.remove();
+  }
 }
 
 // ---------- CSV (إضافي) ----------
