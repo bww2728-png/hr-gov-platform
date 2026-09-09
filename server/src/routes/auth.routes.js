@@ -31,6 +31,26 @@ const changePasswordSchema = z.object({
 const MAX_FAILED = 5;
 const LOCK_MINUTES = 15;
 
+// قائمة أسماء المستخدمين النشطة لشاشة الدخول (عامة عمداً لسهولة الاختيار الداخلي)
+router.get('/usernames', async (req, res, next) => {
+  try {
+    const users = await prisma.user.findMany({
+      where: { status: 'active', deletedAt: null },
+      select: { username: true, fullNameAr: true, role: { select: { nameAr: true } } },
+      orderBy: { username: 'asc' },
+    });
+    res.json({
+      users: users.map((u) => ({
+        username: u.username,
+        fullNameAr: u.fullNameAr,
+        roleName: u.role?.nameAr || null,
+      })),
+    });
+  } catch (e) {
+    next(e);
+  }
+});
+
 router.post('/login', async (req, res, next) => {
   try {
     const { username, password } = loginSchema.parse(req.body);
