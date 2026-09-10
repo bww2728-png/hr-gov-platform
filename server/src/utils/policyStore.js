@@ -30,10 +30,8 @@ let cache = new Map(); // code -> { value, version, effectiveFrom }
 let loadedAt = 0;
 let loading = null;
 
-/** تعريف المعاملات الافتراضية (idempotent) — يعمل مرة واحدة عند أول تحميل */
+/** زرع المعاملات الافتراضية الناقصة (idempotent لكل كود) */
 async function ensureSeeded() {
-  const count = await prisma.policyParameter.count();
-  if (count > 0) return 0;
   const defs = [
     { code: 'gosi.employeePct', category: 'gosi', nameAr: 'نسبة استقطاع المؤمن عليه (GOSI)', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
     { code: 'gosi.employerPct', category: 'gosi', nameAr: 'نسبة حصة صاحب العمل (GOSI)', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
