@@ -317,6 +317,15 @@ model Employee {
   contractType       ContractType         @default(full_time)
   employmentStatus   EmploymentStatus     @default(active) @map("employment_status")
   probationEndDate   DateTime?            @map("probation_end_date")
+  // ==== P0: حقول الامتثال السعودي ====
+  gosiRegistrationDate DateTime?          @map("gosi_registration_date") // تاريخ أول تسجيل في التأمينات — يحدد شريحة النسب المتدرجة
+  gosiSubscriptionWage Decimal?           @map("gosi_subscription_wage") @db.Decimal(12, 2) // الأجر المسجل في التأمينات (إن خالف أساسي+سكن يُحسم الفرق)
+  lastWorkingDate    DateTime?            @map("last_working_date")
+  probationDays      Int?                 @map("probation_days") // 0-180
+  flexibleMaxHours   Int?                 @map("flexible_max_hours") // سقف ساعات العمل المرن شهرياً (95/160 حسب اللائحة)
+  remoteLocation     String?              @map("remote_location")
+  workToolsProvided  Boolean?             @map("work_tools_provided")
+  partTimeRatio      Decimal?             @map("part_time_ratio") @db.Decimal(4, 2) // نسبة دوام الجزئي 0.25-0.75
   branchId           Int                  @map("branch_id")
   branch             Branch               @relation(fields: [branchId], references: [id])
   deptId             Int                  @map("dept_id")
@@ -1058,8 +1067,14 @@ model PayrollRun {
   paidAt             DateTime?            @map("paid_at")
   wpsFileId          Int?                 @map("wps_file_id")
   paramsSnapshotJson Json?                @map("params_snapshot_json") // تثبيت قيم السياسات لحظة الحساب لإعادة الإنتاج
+  // ==== P0: حماية الأجور وقفل الفترة ====
+  wpsDeadline        DateTime?            @map("wps_deadline") // آخر موعد لرفع الملف (يوم uploadByDay من الشهر التالي)
+  wpsStatus          String?              @default("pending") @map("wps_status") // pending, generated, uploaded, accepted, rejected
+  wpsFileGeneratedAt DateTime?            @map("wps_file_generated_at")
+  wpsUploadedAt      DateTime?            @map("wps_uploaded_at")
   items              PayrollItem[]
   ledgerEntries      PayrollLedgerEntry[]
+  periodAdjustments  PeriodAdjustmentRequest[]
   createdAt          DateTime             @default(now()) @map("created_at")
   updatedAt          DateTime             @updatedAt @map("updated_at")
 
@@ -1073,10 +1088,14 @@ model PayrollLedgerEntry {
   run        PayrollRun @relation(fields: [runId], references: [id], onDelete: Cascade)
   employeeId String     @map("employee_id")
   employee   Employee   @relation(fields: [employeeId], references: [id])
-  kind       String // loan_deduction | bonus_payment
+  kind       String // loan_deduction | bonus_payment | late_deduction | payment | reversal
   refId      String?    @map("ref_id")
   amount     Decimal    @db.Decimal(12, 2)
   note       String?
+  reversalOfId String?  @map("reversal_of_id") // القيد الأصلي الذي يعكسه هذا السجل (append-only: التعديل = قيد عكسي)
+  reversalOf PayrollLedgerEntry?  @relation("LedgerReversal", fields: [reversalOfId], references: [id])
+  reversals  PayrollLedgerEntry[] @relation("LedgerReversal")
+  createdById String?   @map("created_by_id")
   createdAt  DateTime   @default(now()) @map("created_at")
 
   @@index([runId])
@@ -2002,6 +2021,127 @@ model PolicyParameterVersion {
   @@unique([parameterCode, version])
   @@index([parameterCode, effectiveFrom])
   @@map("policy_parameter_versions")
+}
+
+// ==== P0-01/07: الورديات المرنة ====
+model WorkShift {
+  id                      Int      @id @default(autoincrement())
+  code                    String   @unique // MORNING, EVENING, NIGHT, RAMADAN...
+  nameAr                  String   @map("name_ar")
+  nameEn                  String?  @map("name_en")
+  startMin                Int      @map("start_min") // دقائق من منتصف الليل (480 = 08:00)
+  endMin                  Int      @map("end_min") // قد يعبر منتصف الليل (0 = 00:00 → 1440)
+  graceInMins             Int      @default(15) @map("grace_in_mins") // سماح التأخير
+  earlyLeaveThresholdMins Int      @default(15) @map("early_leave_threshold_mins") // عتبة الانصراف المبكر
+  checkInWindowBeforeMins Int      @default(60) @map("check_in_window_before_mins") // نافذة التسجيل قبل البداية
+  checkInWindowAfterMins  Int      @default(120) @map("check_in_window_after_mins") // نافذة التسجيل بعد البداية
+  workDays                Int[]    @map("work_days") // أيام العمل: 0=الأحد..6=السبت
+  allowHolidayCheckIn     Boolean  @default(false) @map("allow_holiday_check_in")
+  lateDeductionMultiplier Decimal  @default(1.5) @map("late_deduction_multiplier") @db.Decimal(4, 2)
+  weeklyHourCap           Int      @default(45) @map("weekly_hour_cap")
+  isRamadan               Boolean  @default(false) @map("is_ramadan") // تخفيض تلقائي في رمضان
+  active                  Boolean  @default(true)
+  assignments             ShiftAssignment[]
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@map("work_shifts")
+}
+
+model ShiftAssignment {
+  id        Int       @id @default(autoincrement())
+  shiftId   Int       @map("shift_id")
+  shift     WorkShift @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  scope     String // employee | department | branch
+  refId     String    @map("ref_id") // معرف الموظف/القسم/الفرع
+  startDate DateTime  @map("start_date") @db.Date
+  endDate   DateTime? @map("end_date") @db.Date
+  createdById String? @map("created_by_id")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@unique([scope, refId, startDate])
+  @@index([shiftId])
+  @@index([scope, refId])
+  @@map("shift_assignments")
+}
+
+// ==== P0-05: طلب تعديل بعد الدفع (HR → مالي → CEO → قيود عكسية) ====
+model PeriodAdjustmentRequest {
+  id                 Int       @id @default(autoincrement())
+  payrollRunId       Int       @map("payroll_run_id")
+  payrollRun         PayrollRun @relation(fields: [payrollRunId], references: [id])
+  reason             String
+  payloadJson        Json?     @map("payload_json") // بنود التعديل المقترحة
+  status             String    @default("pending") @map("status") // pending, finance_approved, approved, rejected
+  requestedById      String    @map("requested_by_id")
+  financeDecidedById String?   @map("finance_decided_by_id")
+  ceoDecidedById     String?   @map("ceo_decided_by_id")
+  decidedAt          DateTime? @map("decided_at")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  @@index([payrollRunId])
+  @@map("period_adjustment_requests")
+}
+
+// ==== P0-06: نظام حماية البيانات الشخصية ====
+model DsarRequest {
+  id               Int       @id @default(autoincrement())
+  employeeId       String?   @map("employee_id") // صاحب الطلب (موظف مسجل)
+  requesterName    String    @map("requester_name")
+  requesterContact String?   @map("requester_contact")
+  type             String // access, portable_copy, rectification, erasure
+  details          String?
+  status           String    @default("submitted") @map("status") // submitted, in_progress, completed, rejected, extended
+  dueDate          DateTime  @map("due_date") // تقديم + 30 يوم
+  extendedDueDate  DateTime? @map("extended_due_date") // تمديد حتى 30 إضافي بإشعار مسبب
+  resolution       String?
+  decidedById      String?   @map("decided_by_id") // DPO
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  @@index([employeeId])
+  @@index([status])
+  @@map("dsar_requests")
+}
+
+model RoPAEntry {
+  id                      Int      @id @default(autoincrement())
+  activityName            String   @map("activity_name")
+  purpose                 String // الغرض
+  legalBasis              String   @map("legal_basis") // موافقة/تعاقد/التزام نظامي/مصلحة حيوية/مصلحة عامة
+  dataCategories          String   @map("data_categories") // هوية/مالية/صحية/بيومترية...
+  dataSubjectCategories   String   @map("data_subject_categories") // موظفين/مرشحين/متقاعدين
+  recipientCategories     String   @map("recipient_categories") // داخلي/خارجي
+  retentionPeriod         String   @map("retention_period")
+  securityMeasures        String   @map("security_measures")
+  internationalTransfer   Boolean  @default(false) @map("international_transfer")
+  transferDestination     String?  @map("transfer_destination")
+  transferSafeguards      String?  @map("transfer_safeguards")
+  dpoOwnerId              String?  @map("dpo_owner_id")
+  active                  Boolean  @default(true)
+  createdAt               DateTime @default(now()) @map("created_at")
+  updatedAt               DateTime @updatedAt @map("updated_at")
+
+  @@map("ropa_entries")
+}
+
+model DataBreachIncident {
+  id                 Int       @id @default(autoincrement())
+  title              String
+  detectedAt         DateTime  @map("detected_at")
+  severity           String // low, medium, high, critical
+  description        String
+  affectedCategories String?   @map("affected_categories")
+  containmentActions String?   @map("containment_actions")
+  sdaiaNotifiedAt    DateTime? @map("sdaia_notified_at") // إلزامي ≤ 72 ساعة للمرتفع/الحرج
+  subjectsNotifiedAt DateTime? @map("subjects_notified_at")
+  status             String    @default("open") @map("status") // open, contained, closed
+  reportedById       String?   @map("reported_by_id")
+  createdAt          DateTime  @default(now()) @map("created_at")
+  updatedAt          DateTime  @updatedAt @map("updated_at")
+
+  @@index([severity])
+  @@map("data_breach_incidents")
 }
 
 model FormulaRevision {
