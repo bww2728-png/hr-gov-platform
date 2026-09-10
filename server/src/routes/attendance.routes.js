@@ -12,7 +12,7 @@ const router = express.Router();
 router.use(authenticate);
 
 const selfId = (req) => req.user.employeeId || req.user.employee?.id || null;
-const WORK_START_HOUR = 8; // 08:00 صباحاً
+const rules = require('../utils/attendanceRules');
 
 // ============ سجلات الحضور ============
 router.get('/records', async (req, res, next) => {
@@ -49,8 +49,7 @@ router.post('/records', requirePerm('attendance.write'), async (req, res, next) 
     const ci = data.checkIn ? new Date(data.checkIn) : null;
     const co = data.checkOut ? new Date(data.checkOut) : null;
     if (ci) {
-      const start = new Date(ci); start.setHours(WORK_START_HOUR, 0, 0, 0);
-      lateMins = Math.max(0, Math.round((ci - start) / 60000));
+      lateMins = rules.computeLateMins(ci);
     }
     if (ci && co) workedHours = Math.round(((co - ci) / 3600000) * 100) / 100;
 
@@ -75,9 +74,8 @@ router.post('/check-in', async (req, res, next) => {
     if (!empId) return res.status(400).json({ error: 'لا يوجد ملف موظف مرتبط' });
     const method = z.enum(['fingerprint', 'gps', 'card', 'manual']).parse(req.body?.method || 'gps');
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const start = new Date(today); start.setHours(WORK_START_HOUR, 0, 0, 0);
-    const lateMins = Math.max(0, Math.round((now - start) / 60000));
+    const today = rules.riyadhDayStart(now);
+    const lateMins = rules.computeLateMins(now);
 
     const record = await prisma.attendanceRecord.upsert({
       where: { employeeId_date: { employeeId: empId, date: today } },
@@ -94,16 +92,34 @@ router.post('/check-out', async (req, res, next) => {
     const empId = selfId(req);
     if (!empId) return res.status(400).json({ error: 'لا يوجد ملف موظف مرتبط' });
     const now = new Date();
-    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const today = rules.riyadhDayStart(now);
     const existing = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId: empId, date: today } } });
     if (!existing || !existing.checkIn) return res.status(400).json({ error: 'لم يتم تسجيل حضور اليوم' });
     const workedHours = Math.round(((now - existing.checkIn) / 3600000) * 100) / 100;
+    const earlyMins = rules.computeEarlyMins(now);
     const record = await prisma.attendanceRecord.update({
       where: { id: existing.id },
-      data: { checkOut: now, workedHours },
+      data: { checkOut: now, workedHours, earlyMins },
     });
     audit(req, 'attendance.check_out', { entityType: 'attendance_record', entityId: String(record.id) });
-    res.json({ record, workedHours });
+    res.json({ record, workedHours, earlyMins });
+  } catch (e) { next(e); }
+});
+
+// نافذة الدوام الحالية (للعرض في الواجهات) — من مركز المعايير والقواعد
+router.get('/work-window', async (req, res, next) => {
+  try {
+    const win = rules.getWorkWindow();
+    res.json({ ...win, cutoffHour: win.startHour + win.absenceAfterHours });
+  } catch (e) { next(e); }
+});
+
+// تشغيل مسح الغياب يدوياً (للمسؤول) — نفس منطق المجدول تماماً (idempotent)
+router.post('/absence-sweep/run', requirePerm('attendance.incidents.write'), async (req, res, next) => {
+  try {
+    const result = await rules.runAbsenceSweep({ actorId: req.user.id });
+    audit(req, 'attendance.absence_sweep.run', { entityType: 'attendance_sweep', afterJson: result });
+    res.json({ result });
   } catch (e) { next(e); }
 });
 
@@ -210,21 +226,11 @@ router.post('/incidents', requirePerm('attendance.incidents.write'), async (req,
       hasExcuse: z.boolean().optional(), excuseNote: z.string().max(500).optional(),
     }).parse(req.body);
 
-    // احسب التكرار لتحديد الإجراء التصاعدي
-    const count = await prisma.attendanceIncident.count({ where: { employeeId: data.employeeId, type: data.type } });
-    const occurrence = count + 1;
-    let action = 'none';
-    if (!data.hasExcuse) {
-      if (occurrence >= 3) action = 'deduction';
-      else if (occurrence === 2) action = 'warning_2';
-      else action = 'warning_1';
-    }
-    const incident = await prisma.attendanceIncident.create({
-      data: {
-        employeeId: data.employeeId, type: data.type, date: new Date(data.date),
-        minsLate: data.minsLate || null, hasExcuse: !!data.hasExcuse, excuseNote: data.excuseNote || null,
-        action, occurrence, resolvedById: req.user.id,
-      },
+    // التصعيد عبر المساعد المشترك مع الكشف التلقائي (سلوك واحد)
+    const incident = await rules.escalateIncident({
+      employeeId: data.employeeId, type: data.type, date: new Date(data.date),
+      minsLate: data.minsLate || null, hasExcuse: !!data.hasExcuse, excuseNote: data.excuseNote || null,
+      resolvedById: req.user.id,
     });
     audit(req, 'attendance.incident.create', { entityType: 'attendance_incident', entityId: String(incident.id), afterJson: incident });
     res.status(201).json({ incident });
