@@ -109,12 +109,20 @@ function sickPayTier(usedDaysThisYear, requestedDays) {
  * - سعودي بلا gosiRegistrationDate: يُحسب على القديم (استمرارية، بلا زيادة على الموظف)
  *   مع رفع علم needsRegistrationDate لتصحيح البيانات.
  */
-function isSaudi(nationality) {
+/**
+ * السعودية: تقبل العربية ("سعودي")، النص الإنجليزي ("saudi"/"saudi arabia")،
+ * ورمز ISO 3166 "SAU" — والبيانات الفعلية تخزن ISO codes (seed.js: 'SAU').
+ * residentType (saudi/expat) من seed يعطي الحسم مباشرة عند توفره.
+ */
+function isSaudi(nationality, residentType) {
+  if (residentType != null && String(residentType).trim() !== '') {
+    return String(residentType).toLowerCase() === 'saudi';
+  }
   const n = String(nationality || '').toLowerCase();
-  return n.includes('سعود') || n.includes('saudi');
+  return n.includes('سعود') || n.includes('sau');
 }
 
-function gosiTier({ nationality, gosiRegistrationDate, basicSalary = 0, housingAllowance = 0, gosiSubscriptionWage = null, month, snap }) {
+function gosiTier({ nationality, residentType, gosiRegistrationDate, basicSalary = 0, housingAllowance = 0, gosiSubscriptionWage = null, month, snap }) {
   const val = (code, fb) => (snap ? policyStore.valueFrom(snap, code) : policyStore.get(code, fb));
   const floor = Number(val('gosi.wageFloor', 1500)) || 1500;
   const cap = Number(val('gosi.wageCap', 45000)) || 45000;
@@ -122,7 +130,7 @@ function gosiTier({ nationality, gosiRegistrationDate, basicSalary = 0, housingA
   const wage = Math.min(cap, Math.max(floor, rawWage));
   const out = { wage, wageRaw: rawWage, clamped: rawWage !== wage, employeePct: 0, employerPct: 0, employee: 0, employer: 0, tier: null, needsRegistrationDate: false };
 
-  if (!isSaudi(nationality)) {
+  if (!isSaudi(nationality, residentType)) {
     out.employeePct = 0;
     out.employerPct = Number(val('gosi.expat.employerPct', 2)) || 0;
     out.tier = 'expat';

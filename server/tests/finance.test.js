@@ -107,5 +107,22 @@ eq('DED custom divisor', saudi.lateDeduction(60, 4800, 1, 200), 24, 0.0001);
 const yrs = saudi.calculateEOS({ hireDate: '2019-03-10', endDate: '2026-06-10', wage: 7000, reason: 'resignation' });
 eq('EOS-dateYears≈7.25 ratio=2/3', yrs.ratio, 2 / 3, 0.0001);
 
+// ===== كشف الجنسية ISO (انحدار حي: البيانات تخزن 'SAU' وليس 'saudi') =====
+eq('NAT SAU isSaudi', saudi.isSaudi('SAU'), true);
+eq('NAT saudi-arabia isSaudi', saudi.isSaudi('saudi arabia'), true);
+eq('NAT arabic isSaudi', saudi.isSaudi('سعودي'), true);
+eq('NAT EGY not saudi', saudi.isSaudi('EGY'), false);
+eq('NAT residentType wins (saudi)', saudi.isSaudi('EGY', 'saudi'), true);
+eq('NAT residentType wins (expat)', saudi.isSaudi('SAU', 'expat'), false);
+
+// تدرج GOSI عبر ISO: سعودي SAU مسجل قبل يوليو 2024 → القديم 9.75/11.75
+const tIso = saudi.gosiTier({ nationality: 'SAU', gosiRegistrationDate: '2020-01-01', basicSalary: 6000, housingAllowance: 500, month: { year: 2026, month: 9 } });
+eq('NAT SAU tier=pre_jul2024', tIso.tier, 'pre_jul2024');
+eq('NAT SAU pct 9.75/11.75', tIso.employeePct + '/' + tIso.employerPct, '9.75/11.75');
+// وافد SAU-residentType=expat → 0/2
+const tExp = saudi.gosiTier({ nationality: 'SAU', residentType: 'expat', basicSalary: 6000, housingAllowance: 500, month: { year: 2026, month: 9 } });
+eq('NAT expat override 0/2', tExp.tier, 'expat');
+eq('NAT expat employer=2%', tExp.employerPct, 2, 0.0001);
+
 console.log(`\n===== ${passed} passed, ${failed} failed =====`);
 if (failed > 0) process.exit(1);
