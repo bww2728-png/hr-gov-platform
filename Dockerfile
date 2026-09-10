@@ -11,6 +11,8 @@ RUN echo "build-${CACHEBUST}" && npm run build
 FROM node:20-slim AS server
 RUN apt-get update -y && apt-get install -y --no-install-recommends openssl ca-certificates && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
+# كل الحسابات الزمنية (اليوم، بداية الدوام، المجدول) بتوقيت الرياض — السعودية بلا توقيت صيفي
+ENV TZ=Asia/Riyadh
 WORKDIR /app/server
 COPY server/package.json server/package-lock.json* ./
 RUN npm install --omit=dev --no-audit --no-fund

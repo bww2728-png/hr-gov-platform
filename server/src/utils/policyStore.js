@@ -18,6 +18,10 @@ const SEED_DEFAULTS = {
   // ساعات الدوام
   'workHours.weeklyLimit': 45,
   'workHours.ramadanDailyHours': 6,
+  'workHours.startHour': 8,
+  'workHours.endHour': 17,
+  'workHours.lateGraceMins': 0,
+  'workHours.absenceAfterHours': 4,
 };
 
 const FINANCIAL_CODES = ['gosi.employeePct', 'gosi.employerPct', 'overtime.multiplier', 'absence.dailyDivisor'];
@@ -38,8 +42,16 @@ async function ensureSeeded() {
     { code: 'absence.dailyDivisor', category: 'absence', nameAr: 'مقسوم معدل يوم الغياب', valueType: 'number', unitAr: 'يوم', minValue: 20, maxValue: 40, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
     { code: 'workHours.weeklyLimit', category: 'workHours', nameAr: 'حد ساعات الدوام الأسبوعي', valueType: 'hours', unitAr: 'ساعة', minValue: 30, maxValue: 48, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
     { code: 'workHours.ramadanDailyHours', category: 'workHours', nameAr: 'ساعات العمل اليومية في رمضان', valueType: 'hours', unitAr: 'ساعة', minValue: 4, maxValue: 8, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
+    { code: 'workHours.startHour', category: 'workHours', nameAr: 'ساعة بداية الدوام اليومي', valueType: 'number', unitAr: 'ساعة', minValue: 0, maxValue: 23, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
+    { code: 'workHours.endHour', category: 'workHours', nameAr: 'ساعة نهاية الدوام اليومي', valueType: 'number', unitAr: 'ساعة', minValue: 0, maxValue: 23, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
+    { code: 'workHours.lateGraceMins', category: 'workHours', nameAr: 'سماحية التأخير (دقائق)', valueType: 'number', unitAr: 'دقيقة', minValue: 0, maxValue: 120, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
+    { code: 'workHours.absenceAfterHours', category: 'workHours', nameAr: 'ساعة كشف الغياب التلقائي (بعد بداية الدوام) — صفر يعطّل الكشف', valueType: 'number', unitAr: 'ساعة', minValue: 0, maxValue: 12, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
   ];
+  // زرع المعاملات الناقصة فقط (idempotent) — يعمل مع قاعدة بيانات موجودة
+  let created = 0;
   for (const def of defs) {
+    const exists = await prisma.policyParameter.findUnique({ where: { code: def.code }, select: { code: true } });
+    if (exists) continue;
     await prisma.policyParameter.create({ data: { ...def } });
     await prisma.policyParameterVersion.create({
       data: {
@@ -51,8 +63,9 @@ async function ensureSeeded() {
         createdBy: 'system-seed',
       },
     });
+    created += 1;
   }
-  return defs.length;
+  return created;
 }
 
 /** تحميل/إعادة تحميل الكاش من قاعدة البيانات */

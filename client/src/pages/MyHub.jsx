@@ -23,6 +23,16 @@ export default function MyHub() {
   const [reqTypes, setReqTypes] = useState([]);
   const [leaveForm, setLeaveForm] = useState({ leaveTypeId: '', startDate: '', endDate: '', reason: '' });
   const [reqForm, setReqForm] = useState({ typeId: '', details: '' });
+  const [workWindow, setWorkWindow] = useState(null);
+  const [nowTick, setNowTick] = useState(Date.now());
+
+  // عداد حي — تكة كل ثانية فقط أثناء وجود حضور بلا انصراف
+  const ticking = !!todayRecord?.checkIn && !todayRecord?.checkOut;
+  useEffect(() => {
+    if (!ticking) return;
+    const t = setInterval(() => setNowTick(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, [ticking]);
 
   function load() {
     client.get('/payroll/payslips/me').then(({ data }) => setPayslips(data.payslips)).catch(() => {});
@@ -35,6 +45,7 @@ export default function MyHub() {
     const today = new Date().toISOString().slice(0, 10);
     client.get('/attendance/records', { params: { from: today, to: today } })
       .then(({ data }) => setTodayRecord(data.records[0] || null)).catch(() => {});
+    client.get('/attendance/work-window').then(({ data }) => setWorkWindow(data)).catch(() => {});
   }
   useEffect(load, []);
 
@@ -45,7 +56,11 @@ export default function MyHub() {
   }
   function checkOut() {
     client.post('/attendance/check-out')
-      .then(({ data }) => { toast.success(`تم تسجيل الانصراف — ${data.workedHours} ساعة`); load(); })
+      .then(({ data }) => {
+        const early = data.earlyMins > 0 ? ` — انصراف مبكر ${data.earlyMins} دقيقة` : '';
+        toast.success(`تم تسجيل الانصراف — ${data.workedHours} ساعة${early}`);
+        load();
+      })
       .catch((e) => toast.error(e.response?.data?.error || 'فشل'));
   }
   function submitLeave(e) {
@@ -62,6 +77,13 @@ export default function MyHub() {
   }
 
   const latest = payslips[0];
+  const fmtH = (h) => `${String(h).padStart(2, '0')}:00`;
+  const elapsedMs = todayRecord?.checkIn && !todayRecord?.checkOut
+    ? Math.max(0, nowTick - new Date(todayRecord.checkIn).getTime()) : null;
+  const fmtDur = (ms) => {
+    const s = Math.floor(ms / 1000);
+    return `${String(Math.floor(s / 3600)).padStart(2, '0')}:${String(Math.floor((s % 3600) / 60)).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
+  };
 
   return (
     <div className="page space-y-4">
@@ -71,10 +93,23 @@ export default function MyHub() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
         <div className="card-padded">
           <div className="muted mb-2">حضور اليوم</div>
+          {workWindow && (
+            <div className="text-xs text-ink-500 mb-2">
+              الدوام: {fmtH(workWindow.startHour)} — {fmtH(workWindow.endHour)}
+              {workWindow.lateGraceMins > 0 ? ` (سماحية ${workWindow.lateGraceMins} دقيقة)` : ''}
+            </div>
+          )}
           {todayRecord ? (
             <div className="space-y-1 text-sm">
               <div>الحضور: {todayRecord.checkIn ? new Date(todayRecord.checkIn).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : '—'}</div>
-              <div>الانصراف: {todayRecord.checkOut ? new Date(todayRecord.checkOut).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : '—'}</div>
+              {elapsedMs != null ? (
+                <div className="text-lg font-bold text-primary-700 font-mono" data-testid="live-counter">
+                  {fmtDur(elapsedMs)}
+                </div>
+              ) : (
+                <div>الانصراف: {todayRecord.checkOut ? new Date(todayRecord.checkOut).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : '—'}</div>
+              )}
+              {todayRecord.checkOut && <div className="text-success-700">ساعات العمل: {todayRecord.workedHours}</div>}
               {todayRecord.lateMins > 0 && <div className="text-warn-600">تأخير: {todayRecord.lateMins} دقيقة</div>}
             </div>
           ) : <div className="text-sm text-ink-500 mb-2">لم تسجل حضورك اليوم</div>}
