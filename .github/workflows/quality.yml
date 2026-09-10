@@ -36,5 +36,15 @@ jobs:
           while IFS= read -r file; do
             node --check "$file"
           done < <(find server/src -type f -name '*.js' -print)
+      - name: Run server unit tests
+        shell: bash
+        run: |
+          fail=0
+          for f in server/tests/*.test.js; do
+            echo "::group::$f"
+            node "$f" || fail=1
+            echo "::endgroup::"
+          done
+          exit $fail
       - name: Build client
         run: npm --prefix client run build

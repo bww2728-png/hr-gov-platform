@@ -7,6 +7,7 @@ const prisma = require('../prisma');
 const { authenticate, require: requirePerm } = require('../middleware/auth');
 const { audit } = require('../middleware/audit');
 const saudi = require('../utils/saudiRules');
+const policyStore = require('../utils/policyStore');
 
 const router = express.Router();
 router.use(authenticate);
@@ -107,10 +108,30 @@ router.post('/check-out', async (req, res, next) => {
 });
 
 // نافذة الدوام الحالية (للعرض في الواجهات) — من مركز المعايير والقواعد
+// + قيمة خصم التأخر النقدي اللحظية للموظف الحالي (P0-08)
 router.get('/work-window', async (req, res, next) => {
   try {
     const win = rules.getWorkWindow();
-    res.json({ ...win, cutoffHour: win.startHour + win.absenceAfterHours });
+    const out = { ...win, cutoffHour: win.startHour + win.absenceAfterHours };
+
+    const empId = selfId(req);
+    if (empId) {
+      const today = rules.riyadhDayStart(new Date());
+      const rec = await prisma.attendanceRecord.findUnique({
+        where: { employeeId_date: { employeeId: empId, date: today } },
+        select: { lateMins: true },
+      });
+      const emp = await prisma.employee.findUnique({ where: { id: empId }, select: { salary: true } });
+      const lateMins = rec?.lateMins || 0;
+      const deduction = saudi.lateDeduction(
+        lateMins,
+        Number(emp?.salary) || 0,
+        policyStore.get('attendance.lateDeductionMultiplier'),
+        policyStore.get('payroll.hourlyDivisor')
+      );
+      out.todayLate = { mins: lateMins, deduction: Math.round(deduction * 100) / 100 };
+    }
+    res.json(out);
   } catch (e) { next(e); }
 });
 

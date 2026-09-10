@@ -110,7 +110,12 @@ export default function MyHub() {
                 <div>الانصراف: {todayRecord.checkOut ? new Date(todayRecord.checkOut).toLocaleTimeString('ar-SA', { hour: '2-digit', minute: '2-digit' }) : '—'}</div>
               )}
               {todayRecord.checkOut && <div className="text-success-700">ساعات العمل: {todayRecord.workedHours}</div>}
-              {todayRecord.lateMins > 0 && <div className="text-warn-600">تأخير: {todayRecord.lateMins} دقيقة</div>}
+              {todayRecord.lateMins > 0 && (
+                <div className="text-warn-600">
+                  تأخير: {todayRecord.lateMins} دقيقة
+                  {workWindow?.todayLate ? ` — قيمة الخصم ${workWindow.todayLate.deduction} ر.س` : ''}
+                </div>
+              )}
             </div>
           ) : <div className="text-sm text-ink-500 mb-2">لم تسجل حضورك اليوم</div>}
           <div className="flex gap-2 mt-3">
@@ -125,6 +130,10 @@ export default function MyHub() {
             <div className="space-y-1 text-sm">
               <div>الفترة: {latest.run?.month}/{latest.run?.year}</div>
               <div>الإجمالي: {Number(latest.gross).toLocaleString('ar-SA')} ر.س</div>
+              {Number(latest.gosiEmployee) > 0 && <div className="text-ink-500">التأمينات (حصتي): {Number(latest.gosiEmployee).toLocaleString('ar-SA')} ر.س</div>}
+              {Number(latest.loanDeduct) > 0 && <div className="text-ink-500">قسط السلف: {Number(latest.loanDeduct).toLocaleString('ar-SA')} ر.س</div>}
+              {Number(latest.absenceDeduct) > 0 && <div className="text-ink-500">خصم الغياب: {Number(latest.absenceDeduct).toLocaleString('ar-SA')} ر.س</div>}
+              {Number(latest.lateDeduct) > 0 && <div className="text-ink-500">خصم التأخر: {Number(latest.lateDeduct).toLocaleString('ar-SA')} ر.س</div>}
               <div className="text-lg font-bold text-primary-700">الصافي: {Number(latest.net).toLocaleString('ar-SA')} ر.س</div>
             </div>
           ) : <div className="text-sm text-ink-500">لا توجد قسائم بعد</div>}

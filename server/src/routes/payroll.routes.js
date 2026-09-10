@@ -54,6 +54,8 @@ router.post('/runs/:id/calculate', requirePerm('payroll.prepare'), async (req, r
     const paramsSnapshot = await policyStore.snapshot();
     const otMultiplier = policyStore.valueFrom(paramsSnapshot, 'overtime.multiplier');
     const absenceDivisor = policyStore.valueFrom(paramsSnapshot, 'absence.dailyDivisor');
+    const lateMultiplier = policyStore.valueFrom(paramsSnapshot, 'attendance.lateDeductionMultiplier');
+    const hourlyDivisor = policyStore.valueFrom(paramsSnapshot, 'payroll.hourlyDivisor');
 
     const result = await prisma.$transaction(async (tx) => {
       await tx.payrollItem.deleteMany({ where: { runId: id } });
@@ -77,8 +79,17 @@ router.post('/runs/:id/calculate', requirePerm('payroll.prepare'), async (req, r
         const bonuses = await tx.bonus.findMany({ where: { employeeId: emp.id, status: 'approved', payrollRunId: null } });
         const bonusPay = D(bonuses.reduce((s, b) => s + Number(b.amount), 0));
 
-        // GOSI على (الأساسي + السكن) — من snapshot المعاملات
-        const gosi = saudi.gosiShares(base + housing + transport + otherAllow, paramsSnapshot);
+        // GOSI المتدرج القانوني: أجر خاضع = clamp(أساسي+سكن أو الأجر المسجل، 1500، 45000)
+        // النسب حسب تاريخ التسجيل وسنة الشهر (P0-02) — من snapshot المعاملات
+        const gosi = saudi.gosiTier({
+          nationality: emp.nationality,
+          gosiRegistrationDate: emp.gosiRegistrationDate,
+          basicSalary: base,
+          housingAllowance: housing,
+          gosiSubscriptionWage: emp.gosiSubscriptionWage,
+          month: { year: run.year, month: run.month },
+          snap: paramsSnapshot,
+        });
 
         // أقساط السلف النشطة؛ تحديث الرصيد يتم فقط بعد اعتماد/دفع المسير.
         const loans = await tx.loan.findMany({ where: { employeeId: emp.id, status: 'active' } });
@@ -93,15 +104,22 @@ router.post('/runs/:id/calculate', requirePerm('payroll.prepare'), async (req, r
         });
         const absenceDeduct = D(absences * (base / absenceDivisor));
 
+        // خصم التأخر النقدي (P0-08): مجموع دقائق التأخر الفعلية بالشهر × (الأساسي/240)/60 × المعامل
+        const lateAgg = await tx.attendanceRecord.aggregate({
+          _sum: { lateMins: true },
+          where: { employeeId: emp.id, date: { gte: monthStart, lte: monthEnd } },
+        });
+        const lateDeduct = D(saudi.lateDeduction(lateAgg._sum.lateMins || 0, base, lateMultiplier, hourlyDivisor));
+
         const gross = D(base + housing + transport + otherAllow + overtimePay + bonusPay);
-        const net = D(gross - gosi.employee - loanDeduct - absenceDeduct);
+        const net = D(gross - gosi.employee - loanDeduct - absenceDeduct - lateDeduct);
 
         await tx.payrollItem.create({
           data: {
             runId: id, employeeId: emp.id,
             baseSalary: base, housing, transport, otherAllow, overtimePay, bonusPay,
             gosiEmployee: gosi.employee, gosiEmployer: gosi.employer,
-            loanDeduct, absenceDeduct, gross, net, iban: emp.iban || null,
+            loanDeduct, absenceDeduct, lateDeduct, gross, net, iban: emp.iban || null,
           },
         });
         totalGross += gross; totalNet += net; totalGosi += gosi.employer;
@@ -349,35 +367,95 @@ router.post('/bonuses/:id/decision', requirePerm('bonus.approve'), async (req, r
   } catch (e) { next(e); }
 });
 
-// ============ نهاية الخدمة (معاملة 56) ============
+// ============ نهاية الخدمة (م84/85 — المحرك القانوني الموحد) ============
 router.post('/eos/calculate', requirePerm('eos.calculate'), async (req, res, next) => {
   try {
     const data = z.object({
       employeeId: z.string().uuid(),
-      reason: z.enum(['resignation', 'termination', 'retirement']),
+      reason: z.enum(['resignation', 'termination', 'retirement', 'end_fixed_contract', 'death', 'disability', 'force_majeure', 'article80']),
       endDate: z.string().optional(),
       otherDues: z.number().optional(),
     }).parse(req.body);
     const emp = await prisma.employee.findUnique({ where: { id: data.employeeId } });
     if (!emp) return res.status(404).json({ error: 'الموظف غير موجود' });
 
+    // الأجر المعتمد للـEOS = الأساسي + السكن + البدلات الثابتة المنتظمة (م84)
+    const wage = D((Number(emp.salary) || 0) + (Number(emp.housingAllowance) || 0) + (Number(emp.transportAllowance) || 0) + (Number(emp.otherAllowances) || 0));
     const calc = saudi.calculateEOS({
       hireDate: emp.hireDate,
-      endDate: data.endDate ? new Date(data.endDate) : new Date(),
-      lastSalary: Number(emp.salary),
+      endDate: data.endDate ? new Date(data.endDate) : (emp.lastWorkingDate ? new Date(emp.lastWorkingDate) : new Date()),
+      wage,
       reason: data.reason,
     });
     const otherDues = D(data.otherDues || 0);
     const eos = await prisma.eosCalculation.create({
       data: {
         employeeId: emp.id, reason: data.reason, serviceYears: calc.years,
-        lastSalary: Number(emp.salary), eosAmount: calc.eosAmount,
+        lastSalary: wage, eosAmount: calc.eosAmount,
         otherDues, totalPayable: D(calc.eosAmount + otherDues),
         formulaJson: calc, calculatedById: req.user.id,
       },
     });
     audit(req, 'eos.calculate', { entityType: 'eos_calculation', entityId: String(eos.id), afterJson: eos });
     res.status(201).json({ eos, breakdown: calc });
+  } catch (e) { next(e); }
+});
+
+// ============ تقرير GOSI الشهري (P0-02): الخاضع والنسب والإجمالي ومقارنة الشهر السابق ============
+router.get('/gosi-report', requirePerm('payroll.read'), async (req, res, next) => {
+  try {
+    const now = new Date();
+    const year = Number(req.query.year) || now.getFullYear();
+    const month = Number(req.query.month) || (now.getMonth() === 0 ? 12 : now.getMonth());
+    const prevYear = month === 1 ? year - 1 : year;
+    const prevMonth = month === 1 ? 12 : month - 1;
+
+    const run = await prisma.payrollRun.findUnique({ where: { month_year: { month, year } }, include: { items: true } });
+    if (!run) return res.status(404).json({ error: 'لا يوجد مسير لهذا الشهر — أنشئه واحسبه أولاً' });
+    const prevRun = await prisma.payrollRun.findUnique({ where: { month_year: { month: prevMonth, year: prevYear } }, include: { items: true } });
+
+    const emps = await prisma.employee.findMany({
+      where: { id: { in: run.items.map((i) => i.employeeId) } },
+      select: { id: true, fullNameAr: true, employeeNumber: true, nationality: true, gosiRegistrationDate: true, gosiSubscriptionWage: true, salary: true, housingAllowance: true },
+    });
+    const empMap = Object.fromEntries(emps.map((e) => [e.id, e]));
+    const prevItemMap = Object.fromEntries((prevRun ? prevRun.items : []).map((i) => [i.employeeId, i]));
+
+    const paramsSnapshot = run.paramsSnapshotJson || null;
+    const rows = run.items.map((item) => {
+      const emp = empMap[item.employeeId] || {};
+      const tier = saudi.gosiTier({
+        nationality: emp.nationality,
+        gosiRegistrationDate: emp.gosiRegistrationDate,
+        basicSalary: Number(emp.salary) || 0,
+        housingAllowance: Number(emp.housingAllowance) || 0,
+        gosiSubscriptionWage: emp.gosiSubscriptionWage,
+        month: { year, month },
+        snap: paramsSnapshot,
+      });
+      const prev = prevItemMap[item.employeeId];
+      return {
+        employeeId: item.employeeId,
+        name: emp.fullNameAr, employeeNumber: emp.employeeNumber,
+        tier: tier.tier, needsRegistrationDate: tier.needsRegistrationDate,
+        wageSubject: tier.wage, wageRaw: tier.wageRaw, clamped: tier.clamped,
+        employeePct: tier.employeePct, employerPct: tier.employerPct,
+        employeeShare: item.gosiEmployee, employerShare: item.gosiEmployer,
+        prevEmployeeShare: prev ? prev.gosiEmployee : null,
+        deltaVsPrev: prev ? D(item.gosiEmployee - prev.gosiEmployee) : null,
+      };
+    });
+    res.json({
+      year, month,
+      totals: {
+        employees: rows.length,
+        wageSubject: D(rows.reduce((s, r) => s + r.wageSubject, 0)),
+        employeeShare: D(rows.reduce((s, r) => s + r.employeeShare, 0)),
+        employerShare: D(rows.reduce((s, r) => s + r.employerShare, 0)),
+      },
+      needsRegistrationDate: rows.filter((r) => r.needsRegistrationDate).map((r) => ({ employeeId: r.employeeId, name: r.name })),
+      rows,
+    });
   } catch (e) { next(e); }
 });
 

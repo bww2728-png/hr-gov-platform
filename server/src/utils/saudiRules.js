@@ -100,59 +100,135 @@ function sickPayTier(usedDaysThisYear, requestedDays) {
 }
 
 /**
- * حساب مكافأة نهاية الخدمة — صيغة المعاملة 56:
- * استقالة: <2 = 0 | 2-5 = نصف شهر×السنوات | 5-10 = نصف×5 + شهر×الباقي | >10 = نصف×5 + شهر×5 + 1.5×الباقي
- * إنهاء مشروع: <2 = 0 | 2-5 = نصف×السنوات | >5 = شهر×السنوات
- * تقاعد: استحقاق كامل (نصف×5 + شهر×الباقي)
+ * GOSI المتدرج (P0-02) — النسب حسب تاريخ أول تسجيل في التأمينات وسنة شهر المسير.
+ * - غير سعودي: موظف 0% / صاحب عمل = أخطار مهنية فقط (gosi.expat.employerPct).
+ * - مسجل قبل 3 يوليو 2024: النظام القديم 9.75 / 11.75 (gosi.old.*).
+ * - مسجل بعدها: تدرج سنوي حتى يوليو 2028: 2025=10.25/12.25, 2026=10.75/12.75,
+ *   2027=11.25/13.25, 2028+=11.75/13.75.
+ * - الأجر الخاضع = clamp(gosiSubscriptionWage ?? أساسي+سكن, gosi.wageFloor, gosi.wageCap).
+ * - سعودي بلا gosiRegistrationDate: يُحسب على القديم (استمرارية، بلا زيادة على الموظف)
+ *   مع رفع علم needsRegistrationDate لتصحيح البيانات.
  */
-function calculateEOS({ hireDate, endDate = new Date(), lastSalary, reason, years: yearsInput }) {
-  const years = yearsInput !== undefined ? Number(yearsInput) : serviceYears(hireDate, endDate);
-  const salary = Number(lastSalary) || 0;
-  const half = salary / 2;
-  let eos = 0;
-  const breakdown = { years, reason, segments: [] };
-
-  if (reason === 'resignation') {
-    if (years < 2) { eos = 0; breakdown.segments.push({ note: 'أقل من سنتين — لا استحقاق', amount: 0 }); }
-    else if (years < 5) { eos = half * years; breakdown.segments.push({ note: `نصف شهر × ${years} سنة`, amount: eos }); }
-    else if (years <= 10) {
-      const s1 = half * 5; const s2 = salary * (years - 5);
-      eos = s1 + s2;
-      breakdown.segments.push({ note: 'نصف شهر × 5 سنوات', amount: s1 }, { note: `شهر × ${+(years - 5).toFixed(2)}`, amount: s2 });
-    } else {
-      const s1 = half * 5; const s2 = salary * 5; const s3 = salary * 1.5 * (years - 10);
-      eos = s1 + s2 + s3;
-      breakdown.segments.push({ note: 'نصف شهر × 5', amount: s1 }, { note: 'شهر × 5', amount: s2 }, { note: `1.5 شهر × ${+(years - 10).toFixed(2)}`, amount: s3 });
-    }
-  } else if (reason === 'termination') {
-    if (years < 2) { eos = 0; breakdown.segments.push({ note: 'أقل من سنتين — لا استحقاق', amount: 0 }); }
-    else if (years <= 5) { eos = half * years; breakdown.segments.push({ note: `نصف شهر × ${years} سنة`, amount: eos }); }
-    else {
-      const s1 = half * 5; const s2 = salary * (years - 5);
-      eos = s1 + s2;
-      breakdown.segments.push({ note: 'نصف شهر × 5 سنوات', amount: s1 }, { note: `شهر × ${+(years - 5).toFixed(2)}`, amount: s2 });
-    }
-  } else { // retirement — استحقاق كامل
-    const first5 = Math.min(years, 5);
-    const rest = Math.max(0, years - 5);
-    const s1 = half * first5; const s2 = salary * rest;
-    eos = s1 + s2;
-    breakdown.segments.push({ note: `نصف شهر × ${first5} سنوات`, amount: s1 }, { note: `شهر × ${+rest.toFixed(2)}`, amount: s2 });
-  }
-
-  breakdown.eosAmount = Math.round(eos * 100) / 100;
-  return breakdown;
+function isSaudi(nationality) {
+  const n = String(nationality || '').toLowerCase();
+  return n.includes('سعود') || n.includes('saudi');
 }
 
-/** حساب حصص GOSI — مع دعم snapshot المعاملات لتثبيت القيم على المسير */
+function gosiTier({ nationality, gosiRegistrationDate, basicSalary = 0, housingAllowance = 0, gosiSubscriptionWage = null, month, snap }) {
+  const val = (code, fb) => (snap ? policyStore.valueFrom(snap, code) : policyStore.get(code, fb));
+  const floor = Number(val('gosi.wageFloor', 1500)) || 1500;
+  const cap = Number(val('gosi.wageCap', 45000)) || 45000;
+  const rawWage = gosiSubscriptionWage != null ? Number(gosiSubscriptionWage) : (Number(basicSalary) || 0) + (Number(housingAllowance) || 0);
+  const wage = Math.min(cap, Math.max(floor, rawWage));
+  const out = { wage, wageRaw: rawWage, clamped: rawWage !== wage, employeePct: 0, employerPct: 0, employee: 0, employer: 0, tier: null, needsRegistrationDate: false };
+
+  if (!isSaudi(nationality)) {
+    out.employeePct = 0;
+    out.employerPct = Number(val('gosi.expat.employerPct', 2)) || 0;
+    out.tier = 'expat';
+  } else if (!gosiRegistrationDate) {
+    out.employeePct = Number(val('gosi.old.employeePct', 9.75));
+    out.employerPct = Number(val('gosi.old.employerPct', 11.75));
+    out.tier = 'legacy_unknown_reg_date';
+    out.needsRegistrationDate = true;
+  } else if (new Date(gosiRegistrationDate) < new Date('2024-07-03T00:00:00Z')) {
+    out.employeePct = Number(val('gosi.old.employeePct', 9.75));
+    out.employerPct = Number(val('gosi.old.employerPct', 11.75));
+    out.tier = 'pre_jul2024';
+  } else {
+    const y = (month && Number(month.year)) || new Date().getFullYear();
+    const yy = y <= 2024 ? 2025 : Math.min(y, 2028);
+    out.employeePct = Number(val(`gosi.y${yy}.employeePct`, 11.75));
+    out.employerPct = Number(val(`gosi.y${yy}.employerPct`, 13.75));
+    out.tier = `y${yy}`;
+  }
+  out.employee = Math.round(wage * out.employeePct) / 100;
+  out.employer = Math.round(wage * out.employerPct) / 100;
+  return out;
+}
+
+/**
+ * حصص GOSI — التوافق القديم: أساس رقمي + snapshot. يطبق الأرضية والسقف وينبض النسب
+ * المتدرجة حسب السياسات (بدون سياق موظف: يفترض القديم — يستخدم في الشروح الاسترشادية فقط).
+ */
 function gosiShares(salaryBase, snap) {
   const base = Number(salaryBase) || 0;
-  const employeePct = snap ? policyStore.valueFrom(snap, 'gosi.employeePct') : RULES.gosi.employeePct;
-  const employerPct = snap ? policyStore.valueFrom(snap, 'gosi.employerPct') : RULES.gosi.employerPct;
+  const val = (code, fb) => (snap ? policyStore.valueFrom(snap, code) : policyStore.get(code, fb));
+  const floor = Number(val('gosi.wageFloor', 1500)) || 1500;
+  const cap = Number(val('gosi.wageCap', 45000)) || 45000;
+  const wage = Math.min(cap, Math.max(floor, base));
+  const employeePct = Number(val('gosi.old.employeePct', 9.75));
+  const employerPct = Number(val('gosi.old.employerPct', 11.75));
   return {
-    employee: Math.round(base * employeePct) / 100,
-    employer: Math.round(base * employerPct) / 100,
+    wage, employeePct, employerPct,
+    employee: Math.round(wage * employeePct) / 100,
+    employer: Math.round(wage * employerPct) / 100,
   };
+}
+
+/** عداد الخصم النقدي للتأخر (P0-08): (دقائق/60) × (الأساسي/المقسوم) × المعامل */
+function lateDeduction(lateMins, basicSalary, multiplier = 1.5, divisor = 240) {
+  const mins = Math.max(0, Number(lateMins) || 0);
+  const rate = (Number(basicSalary) || 0) / (Number(divisor) || 240);
+  return Math.round((mins / 60) * rate * (Number(multiplier) || 0) * 1000) / 1000;
+}
+
+/**
+ * مكافأة نهاية الخدمة — القانوني الكامل (المادتان 84 و85) (P0-03):
+ * الأجر المعتمد = الأساسي + السكن + البدلات الثابتة المنتظمة (لا عمولات/متغيرة).
+ * الاستحقاق الكامل: نصف شهر × أول 5 سنوات + شهر × ما بعدها (الكسور بنسبي الشهور).
+ * نسب الاستقطاع للاستقالة في العقد غير المحدد: <2=0 | 2-5=ثلث | 5-10=ثلثان | ≥10=كامل.
+ * الاستحقاق بلا استقطاع: إنهاء صاحب العمل، انتهاء عقد محدد، تقاعد، وفاة/عجز، قوة قاهرة.
+ * الصفر: فصل فوري بموجب المادة 80.
+ */
+const EOS_FULL_REASONS = ['termination', 'end_fixed_contract', 'retirement', 'death', 'disability', 'force_majeure', 'employer_bankruptcy'];
+const EOS_ZERO_REASONS = ['article80', 'worker_breach'];
+
+function calculateEOS({ hireDate, endDate = new Date(), lastSalary, reason = 'termination', years: yearsInput, wage: wageInput }) {
+  // سنوات خدمة كسرية دقيقة (النسبي بالشهور للكسور)
+  let years;
+  if (yearsInput !== undefined) years = Number(yearsInput);
+  else if (hireDate && endDate) {
+    const start = new Date(hireDate); const end = new Date(endDate);
+    const totalDays = Math.max(0, (end - start) / 86400000);
+    years = totalDays / 365.25;
+  } else years = 0;
+  years = Math.max(0, years);
+
+  const wage = Number(wageInput ?? lastSalary) || 0;
+  const first5 = Math.min(years, 5);
+  const rest = Math.max(0, years - 5);
+  const s1 = (wage / 2) * first5;
+  const s2 = wage * rest;
+  const gross = s1 + s2;
+
+  const breakdown = { years: Math.round(years * 100) / 100, reason, wage, segments: [], gross: Math.round(gross * 100) / 100, ratio: 1, eosAmount: 0 };
+  if (first5 > 0) breakdown.segments.push({ note: `نصف شهر × ${+first5.toFixed(2)} سنة`, amount: Math.round(s1 * 100) / 100 });
+  if (rest > 0) breakdown.segments.push({ note: `شهر × ${+rest.toFixed(2)} سنة`, amount: Math.round(s2 * 100) / 100 });
+
+  if (EOS_ZERO_REASONS.includes(reason)) {
+    breakdown.segments.push({ note: 'فصل فوري — المادة 80: لا مكافأة', amount: 0 });
+    breakdown.eosAmount = 0;
+    return breakdown;
+  }
+  if (EOS_FULL_REASONS.includes(reason)) {
+    breakdown.eosAmount = breakdown.gross;
+    return breakdown;
+  }
+  if (reason === 'resignation') {
+    let ratio = 0;
+    if (years < 2) { ratio = 0; breakdown.segments.push({ note: 'استقالة قبل سنتين — لا استحقاق (م85)', amount: 0 }); }
+    else if (years < 5) { ratio = 1 / 3; breakdown.segments.push({ note: 'استقالة 2-5 سنوات: ثلث المكافأة (م85)', amount: 0 }); }
+    else if (years < 10) { ratio = 2 / 3; breakdown.segments.push({ note: 'استقالة 5-10 سنوات: ثلثا المكافأة (م85)', amount: 0 }); }
+    else { ratio = 1; breakdown.segments.push({ note: 'استقالة 10+ سنوات: كامل المكافأة (م85)', amount: 0 }); }
+    breakdown.ratio = ratio;
+    breakdown.eosAmount = Math.round(gross * ratio * 100) / 100;
+    return breakdown;
+  }
+  // سبب غير معروف: الأصل الاستحقاق الكامل (منع خصم غير مبرر)
+  breakdown.segments.push({ note: 'استحقاق كامل (سبب غير مقيد بالاستقطاع)', amount: 0 });
+  breakdown.eosAmount = breakdown.gross;
+  return breakdown;
 }
 
 /** رسوم رخصة العمل حسب حجم المنشأة */
@@ -200,8 +276,13 @@ module.exports = {
   annualEntitlement,
   annualAccrualMonthly,
   sickPayTier,
-  calculateEOS,
+  isSaudi,
+  gosiTier,
   gosiShares,
+  lateDeduction,
+  EOS_FULL_REASONS,
+  EOS_ZERO_REASONS,
+  calculateEOS,
   workPermitFee,
   familyVisaEligible,
   iqamaDeadline,

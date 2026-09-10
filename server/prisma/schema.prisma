@@ -1118,6 +1118,7 @@ model PayrollItem {
   gosiEmployer  Decimal    @default(0) @map("gosi_employer") @db.Decimal(12, 2) // 11.75%
   loanDeduct    Decimal    @default(0) @map("loan_deduct") @db.Decimal(12, 2)
   absenceDeduct Decimal    @default(0) @map("absence_deduct") @db.Decimal(12, 2)
+  lateDeduct    Decimal    @default(0) @map("late_deduct") @db.Decimal(12, 2)
   otherDeduct   Decimal    @default(0) @map("other_deduct") @db.Decimal(12, 2)
   gross         Decimal    @db.Decimal(12, 2)
   net           Decimal    @db.Decimal(12, 2)
