@@ -132,7 +132,7 @@ export default function Payroll() {
               <h2 className="h3 mb-3">بنود المسير {selectedRun.code} ({items.length})</h2>
               <div className="table-wrap">
                 <table>
-                  <thead><tr><th>الموظف</th><th>أساسي</th><th>سكن</th><th>إضافي</th><th>مكافآت</th><th>GOSI</th><th>سلف</th><th>غياب</th><th>الصافي</th></tr></thead>
+                  <thead><tr><th>الموظف</th><th>أساسي</th><th>سكن</th><th>إضافي</th><th>مكافآت</th><th>GOSI</th><th>سلف</th><th>غياب</th><th>تأخر</th><th>الصافي</th></tr></thead>
                   <tbody>
                     {items.map((i) => (
                       <tr key={i.id}>
@@ -144,6 +144,7 @@ export default function Payroll() {
                         <td className="text-danger-600">-{money(i.gosiEmployee)}</td>
                         <td className="text-danger-600">-{money(i.loanDeduct)}</td>
                         <td className="text-danger-600">-{money(i.absenceDeduct)}</td>
+                        <td className="text-danger-600">-{money(i.lateDeduct)}</td>
                         <td className="font-bold">{money(i.net)}</td>
                       </tr>
                     ))}

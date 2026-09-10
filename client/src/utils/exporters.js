@@ -26,7 +26,7 @@ const AR_LABELS = {
   housing: 'بدل السكن', housingAllowance: 'بدل السكن', transport: 'بدل النقل', transportAllowance: 'بدل النقل',
   otherAllow: 'بدلات أخرى', otherAllowances: 'بدلات أخرى', overtimePay: 'أجر الإضافي', bonusPay: 'مكافآت',
   gosiEmployee: 'حصة التأمينات (الموظف)', gosiEmployer: 'حصة التأمينات (صاحب العمل)',
-  loanDeduct: 'خصم السلف', absenceDeduct: 'خصم الغياب', otherDeduct: 'خصومات أخرى',
+  loanDeduct: 'خصم السلف', absenceDeduct: 'خصم الغياب', lateDeduct: 'خصم التأخر', otherDeduct: 'خصومات أخرى',
   gross: 'الإجمالي', net: 'الصافي',
   code: 'الكود', month: 'الشهر', year: 'السنة', status: 'الحالة', paymentDate: 'تاريخ الصرف',
   startDate: 'تاريخ البداية', endDate: 'تاريخ النهاية', hireDate: 'تاريخ التعيين',

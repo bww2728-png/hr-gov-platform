@@ -112,7 +112,7 @@ const RUNNERS = {
         select: { id: true, fullNameAr: true, employeeNumber: true, department: { select: { nameAr: true } }, position: { select: { titleAr: true } } },
       });
     }
-    return { payslip: { employee: subject, run: item.run, earnings: { baseSalary: item.baseSalary, housing: item.housing, transport: item.transport, otherAllow: item.otherAllow, overtimePay: item.overtimePay, bonusPay: item.bonusPay }, deductions: { gosiEmployee: item.gosiEmployee, gosiEmployer: item.gosiEmployer, loanDeduct: item.loanDeduct, absenceDeduct: item.absenceDeduct, otherDeduct: item.otherDeduct }, gross: item.gross, net: item.net, iban: item.iban } };
+    return { payslip: { employee: subject, run: item.run, earnings: { baseSalary: item.baseSalary, housing: item.housing, transport: item.transport, otherAllow: item.otherAllow, overtimePay: item.overtimePay, bonusPay: item.bonusPay }, deductions: { gosiEmployee: item.gosiEmployee, gosiEmployer: item.gosiEmployer, loanDeduct: item.loanDeduct, absenceDeduct: item.absenceDeduct, lateDeduct: item.lateDeduct, otherDeduct: item.otherDeduct }, gross: item.gross, net: item.net, iban: item.iban } };
   },
   'FIN-02': async () => {
     const runs = await prisma.payrollRun.findMany({
@@ -322,7 +322,7 @@ const RUNNERS = {
 const FIN_FIELDS = new Set([
   'nationalId', 'iban', 'bankAccount', 'salary', 'housingAllowance', 'transportAllowance',
   'otherAllowances', 'basicSalary', 'gross', 'net', 'gosiEmployee', 'gosiEmployer',
-  'loanDeduct', 'absenceDeduct', 'otherDeduct', 'overtimePay', 'bonusPay',
+  'loanDeduct', 'absenceDeduct', 'lateDeduct', 'otherDeduct', 'overtimePay', 'bonusPay',
 ]);
 const EXPAT_FIELDS = new Set(['iqamaNumber', 'passportNumber']);
 
