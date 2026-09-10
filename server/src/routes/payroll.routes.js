@@ -83,6 +83,7 @@ router.post('/runs/:id/calculate', requirePerm('payroll.prepare'), async (req, r
         // النسب حسب تاريخ التسجيل وسنة الشهر (P0-02) — من snapshot المعاملات
         const gosi = saudi.gosiTier({
           nationality: emp.nationality,
+          residentType: emp.residentType,
           gosiRegistrationDate: emp.gosiRegistrationDate,
           basicSalary: base,
           housingAllowance: housing,
@@ -416,7 +417,7 @@ router.get('/gosi-report', requirePerm('payroll.read'), async (req, res, next) =
 
     const emps = await prisma.employee.findMany({
       where: { id: { in: run.items.map((i) => i.employeeId) } },
-      select: { id: true, fullNameAr: true, employeeNumber: true, nationality: true, gosiRegistrationDate: true, gosiSubscriptionWage: true, salary: true, housingAllowance: true },
+      select: { id: true, fullNameAr: true, employeeNumber: true, nationality: true, residentType: true, gosiRegistrationDate: true, gosiSubscriptionWage: true, salary: true, housingAllowance: true },
     });
     const empMap = Object.fromEntries(emps.map((e) => [e.id, e]));
     const prevItemMap = Object.fromEntries((prevRun ? prevRun.items : []).map((i) => [i.employeeId, i]));
@@ -426,6 +427,7 @@ router.get('/gosi-report', requirePerm('payroll.read'), async (req, res, next) =
       const emp = empMap[item.employeeId] || {};
       const tier = saudi.gosiTier({
         nationality: emp.nationality,
+        residentType: emp.residentType,
         gosiRegistrationDate: emp.gosiRegistrationDate,
         basicSalary: Number(emp.salary) || 0,
         housingAllowance: Number(emp.housingAllowance) || 0,
