@@ -22,6 +22,39 @@ const SEED_DEFAULTS = {
   'workHours.endHour': 17,
   'workHours.lateGraceMins': 0,
   'workHours.absenceAfterHours': 4,
+  // ==== P0-02: التأمينات المتدرجة (المسجل بعد 3 يوليو 2024 يتدرج حتى يوليو 2028) ====
+  'gosi.old.employeePct': 9.75,      // مسجل قبل 3 يوليو 2024
+  'gosi.old.employerPct': 11.75,
+  'gosi.y2025.employeePct': 10.25,
+  'gosi.y2025.employerPct': 12.25,
+  'gosi.y2026.employeePct': 10.75,   // السارية حالياً (2026)
+  'gosi.y2026.employerPct': 12.75,
+  'gosi.y2027.employeePct': 11.25,
+  'gosi.y2027.employerPct': 13.25,
+  'gosi.y2028.employeePct': 11.75,
+  'gosi.y2028.employerPct': 13.75,
+  'gosi.expat.employerPct': 2,       // الوافد: أخطار مهنية فقط
+  'gosi.wageFloor': 1500,
+  'gosi.wageCap': 45000,
+  // ==== P0-08: عداد الخصم النقدي ====
+  'payroll.hourlyDivisor': 240,
+  'attendance.lateDeductionMultiplier': 1.5,
+  // ==== P0-10: عقود مرنة/جزئية ====
+  'flexible.maxMonthlyHours': 95,    // تعارض موثق: صفحة HRSD الرسمية 160 — قابل للضبط
+  'flexible.hourlyMinWage': 20,
+  // ==== P0-04: حماية الأجور (مواعيد قابلة للضبط — المصادر تختلف 7/10) ====
+  'wps.payByDay': 7,
+  'wps.uploadByDay': 10,
+  // ==== P0-06: PDPL ====
+  'dsar.responseDays': 30,
+  'dsar.extensionDays': 30,
+  'breach.sdaiaHours': 72,
+  'retention.personnelYears': 5,
+  'retention.financialYears': 10,
+  'retention.candidateMonths': 6,
+  // ==== P1-01: نطاقات المطور — ثوابت المعادلة حسب النشاط تُدخل إدارياً ====
+  'nitaqat.lnM': 0,
+  'nitaqat.lnC': 0,
 };
 
 const FINANCIAL_CODES = ['gosi.employeePct', 'gosi.employerPct', 'overtime.multiplier', 'absence.dailyDivisor'];
@@ -44,6 +77,39 @@ async function ensureSeeded() {
     { code: 'workHours.endHour', category: 'workHours', nameAr: 'ساعة نهاية الدوام اليومي', valueType: 'number', unitAr: 'ساعة', minValue: 0, maxValue: 23, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
     { code: 'workHours.lateGraceMins', category: 'workHours', nameAr: 'سماحية التأخير (دقائق)', valueType: 'number', unitAr: 'دقيقة', minValue: 0, maxValue: 120, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
     { code: 'workHours.absenceAfterHours', category: 'workHours', nameAr: 'ساعة كشف الغياب التلقائي (بعد بداية الدوام) — صفر يعطّل الكشف', valueType: 'number', unitAr: 'ساعة', minValue: 0, maxValue: 12, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
+    // ==== P0-02: التأمينات المتدرجة ====
+    { code: 'gosi.old.employeePct', category: 'gosi', nameAr: 'GOSI موظف — مسجل قبل 3 يوليو 2024', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'gosi.old.employerPct', category: 'gosi', nameAr: 'GOSI صاحب عمل — مسجل قبل 3 يوليو 2024', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'gosi.y2025.employeePct', category: 'gosi', nameAr: 'GOSI موظف — نظام 2025', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'gosi.y2025.employerPct', category: 'gosi', nameAr: 'GOSI صاحب عمل — نظام 2025', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'gosi.y2026.employeePct', category: 'gosi', nameAr: 'GOSI موظف — نظام 2026 (السارية)', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'gosi.y2026.employerPct', category: 'gosi', nameAr: 'GOSI صاحب عمل — نظام 2026 (السارية)', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'gosi.y2027.employeePct', category: 'gosi', nameAr: 'GOSI موظف — نظام 2027', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'gosi.y2027.employerPct', category: 'gosi', nameAr: 'GOSI صاحب عمل — نظام 2027', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'gosi.y2028.employeePct', category: 'gosi', nameAr: 'GOSI موظف — نظام 2028 (النهائية)', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'gosi.y2028.employerPct', category: 'gosi', nameAr: 'GOSI صاحب عمل — نظام 2028 (النهائية)', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'gosi.expat.employerPct', category: 'gosi', nameAr: 'GOSI صاحب عمل — وافد (أخطار مهنية فقط)', valueType: 'percent', unitAr: '%', minValue: 0, maxValue: 50, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'gosi.wageFloor', category: 'gosi', nameAr: 'أدنى أجر خاضع للاشتراك', valueType: 'number', unitAr: 'ريال', minValue: 0, maxValue: 10000, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'gosi.wageCap', category: 'gosi', nameAr: 'سقف الأجر الخاضع للاشتراك', valueType: 'number', unitAr: 'ريال', minValue: 1000, maxValue: 100000, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    // ==== P0-08: عداد الخصم النقدي ====
+    { code: 'payroll.hourlyDivisor', category: 'payroll', nameAr: 'مقسوم أجر الساعة (الأساسي ÷ المقسوم)', valueType: 'number', unitAr: 'ساعة', minValue: 120, maxValue: 480, ownerRoles: ['hr_director', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'attendance.lateDeductionMultiplier', category: 'attendance', nameAr: 'معامل خصم التأخر النقدي', valueType: 'number', unitAr: '×', minValue: 0, maxValue: 3, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
+    // ==== P0-10: عقود مرنة/جزئية ====
+    { code: 'flexible.maxMonthlyHours', category: 'flexible', nameAr: 'سقف ساعات العمل المرن شهرياً (HRSD الرسمية: 160)', valueType: 'hours', unitAr: 'ساعة', minValue: 40, maxValue: 200, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
+    { code: 'flexible.hourlyMinWage', category: 'flexible', nameAr: 'الحد الأدنى لأجر ساعة العمل المرن', valueType: 'number', unitAr: 'ريال', minValue: 10, maxValue: 50, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
+    // ==== P0-04: حماية الأجور ====
+    { code: 'wps.payByDay', category: 'wps', nameAr: 'آخر يوم صرف الرواتب (من الشهر التالي)', valueType: 'number', unitAr: 'يوم', minValue: 1, maxValue: 28, ownerRoles: ['finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'wps.uploadByDay', category: 'wps', nameAr: 'آخر يوم رفع ملف حماية الأجور (من الشهر التالي)', valueType: 'number', unitAr: 'يوم', minValue: 1, maxValue: 28, ownerRoles: ['finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    // ==== P0-06: PDPL ====
+    { code: 'dsar.responseDays', category: 'pdpl', nameAr: 'مدة الاستجابة لطلبات أصحاب البيانات', valueType: 'number', unitAr: 'يوم', minValue: 5, maxValue: 90, ownerRoles: ['dpo'], approverRoles: ['dpo', 'ceo'], requiresApproval: true },
+    { code: 'dsar.extensionDays', category: 'pdpl', nameAr: 'أقصى تمديد للاستجابة (بإشعار مسبب)', valueType: 'number', unitAr: 'يوم', minValue: 0, maxValue: 60, ownerRoles: ['dpo'], approverRoles: ['dpo', 'ceo'], requiresApproval: true },
+    { code: 'breach.sdaiaHours', category: 'pdpl', nameAr: 'مهلة الإبلاغ لسدايا عن تسرب البيانات', valueType: 'number', unitAr: 'ساعة', minValue: 24, maxValue: 168, ownerRoles: ['dpo'], approverRoles: ['dpo', 'ceo'], requiresApproval: true },
+    { code: 'retention.personnelYears', category: 'pdpl', nameAr: 'احتفاظ بيانات الموظفين بعد انتهاء العلاقة', valueType: 'number', unitAr: 'سنة', minValue: 1, maxValue: 15, ownerRoles: ['dpo'], approverRoles: ['dpo', 'ceo'], requiresApproval: true },
+    { code: 'retention.financialYears', category: 'pdpl', nameAr: 'احتفاظ البيانات المالية والرواتب', valueType: 'number', unitAr: 'سنة', minValue: 5, maxValue: 20, ownerRoles: ['dpo', 'finance_manager'], approverRoles: ['finance_manager', 'ceo'], requiresApproval: true },
+    { code: 'retention.candidateMonths', category: 'pdpl', nameAr: 'احتفاظ بيانات المرشحين غير المقبولين', valueType: 'number', unitAr: 'شهر', minValue: 1, maxValue: 24, ownerRoles: ['dpo'], approverRoles: ['dpo', 'ceo'], requiresApproval: true },
+    // ==== P1-01: نطاقات المطور ====
+    { code: 'nitaqat.lnM', category: 'nitaqat', nameAr: 'ثابت m في معادلة نطاقات (y = m·ln(n)+c) — حسب النشاط من الدليل الإجرائي', valueType: 'number', unitAr: '', minValue: -50, maxValue: 50, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
+    { code: 'nitaqat.lnC', category: 'nitaqat', nameAr: 'ثابت c في معادلة نطاقات — حسب النشاط من الدليل الإجرائي', valueType: 'number', unitAr: '', minValue: -50, maxValue: 50, ownerRoles: ['hr_director'], approverRoles: ['hr_director', 'ceo'], requiresApproval: true },
   ];
   // زرع المعاملات الناقصة فقط (idempotent) — يعمل مع قاعدة بيانات موجودة
   let created = 0;
