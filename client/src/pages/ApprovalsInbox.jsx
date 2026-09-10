@@ -32,14 +32,16 @@ function Diff({ before, after }) {
 }
 
 export default function ApprovalsInbox() {
-  const { user } = useAuth();
+  const { user, has } = useAuth();
   const toast = useToast();
   const [tab, setTab] = useState('pending');
   const [pending, setPending] = useState([]);
   const [all, setAll] = useState([]);
   const [openId, setOpenId] = useState(null);
+  const canGov = has('governance.read');
 
   function load() {
+    if (!canGov) return;
     client.get('/governance/pending').then(({ data }) => setPending(data.items)).catch(() => setPending([]));
     client.get('/governance/all').then(({ data }) => setAll(data.items)).catch(() => setAll([]));
   }
@@ -69,7 +71,12 @@ export default function ApprovalsInbox() {
       </div>
 
       <div className="space-y-2">
-        {items.map((cr) => {
+        {!canGov && (
+          <div className="card-padded text-center text-ink-400">
+            لا تملك صلاحية عرض طلبات التغيير المحكومة — هذه الشاشة مخصصة لأصحاب صلاحية الحوكمة
+          </div>
+        )}
+        {canGov && items.map((cr) => {
           const chain = Array.isArray(cr.approverChain) ? cr.approverChain : [];
           const approvals = Array.isArray(cr.approvalsJson) ? cr.approvalsJson : [];
           const isOpen = openId === cr.id;
@@ -131,7 +138,7 @@ export default function ApprovalsInbox() {
             </div>
           );
         })}
-        {!items.length && (
+        {canGov && !items.length && (
           <div className="card-padded text-center text-ink-400">
             {tab === 'pending' ? 'لا توجد طلبات بانتظار اعتمادك' : 'لا توجد طلبات تغيير بعد'}
           </div>

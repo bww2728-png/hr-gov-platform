@@ -47,8 +47,11 @@ router.get('/', async (req, res, next) => {
       if (seeTeam && empId) {
         const team = await prisma.employee.findMany({ where: { managerId: empId }, select: { id: true } });
         where.employeeId = { in: [empId, ...team.map((t) => t.id)] };
-      } else {
+      } else if (empId) {
         where.employeeId = empId;
+      } else {
+        // مستخدم بلا ملف موظف ولا صلاحية قراءة واسعة — لا شيء يراه (employeeId غير قابل للـ null)
+        return res.json({ requests: [] });
       }
     }
     if (req.query.status) where.status = String(req.query.status);
