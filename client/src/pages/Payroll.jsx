@@ -70,13 +70,12 @@ export default function Payroll() {
       .then(({ data }) => { setEosResult(data); load(); })
       .catch((err) => toast.error(err.response?.data?.error || 'فشل'));
   }
-  function genWps(month, year) {
+  function genWps(month, year, acknowledge = false) {
     const run = month ? { month, year } : runs.find((r) => ['approved', 'paid'].includes(r.status));
     if (!run) return toast.error('لا يوجد مسير معتمد');
-    client.post('/payroll/wps/generate', { month: run.month, year: run.year })
+    client.post('/payroll/wps/generate', { month: run.month, year: run.year, acknowledge })
       .then(({ data }) => {
         toast.success(`تم توليد ملف SIF/WPS (${data.recordCount} سجل)`);
-        // تنزيل الملف تلقائياً (CSV بترميز UTF-8 مع BOM من الخادم)
         const blob = new Blob([data.csv], { type: 'text/csv;charset=utf-8' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
@@ -84,7 +83,14 @@ export default function Payroll() {
         a.click(); URL.revokeObjectURL(url);
         load();
       })
-      .catch((err) => toast.error(err.response?.data?.error || 'فشل'));
+      .catch((err) => {
+        // فروقات مطابقة: عرضها ثم إتاحة الإقرار الصريح (مسير مدفوع تاريخياً)
+        const m = err.response?.data;
+        if (m?.mismatches?.length && window.confirm(`فروقات مطابقة ثلاثية (${m.mismatches.length} موظف) — أولها: ${m.mismatches[0].reason}\n\nإن كانت الفروقات تاريخية (مسير مدفوع بالمحرك القديم) يمكن إقرارها ورفع الملف موثقاً. هل تقر؟`)) {
+          return genWps(month, year, true);
+        }
+        toast.error(m?.error || 'فشل');
+      });
   }
   function wpsStatus(id, status) {
     client.post(`/payroll/wps/${id}/status`, { status }).then(() => { toast.success('تم تحديث الحالة'); load(); }).catch((err) => toast.error(err.response?.data?.error || 'فشل'));
