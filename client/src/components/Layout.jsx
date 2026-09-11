@@ -25,6 +25,7 @@ const NAV_SECTIONS = [
       { to: '/requests', label: 'مركز الطلبات', perm: 'requests.create' },
       { to: '/leaves', label: 'الإجازات', perm: 'self.leave.read' },
       { to: '/attendance', label: 'الحضور', perm: 'self.attendance.read' },
+      { to: '/shifts', label: 'الورديات', perm: 'shifts.read' },
       { to: '/payroll', label: 'الرواتب', perm: 'payroll.read' },
       { to: '/relations', label: 'تأديب وتظلمات', perm: 'grievances.create' },
     ],

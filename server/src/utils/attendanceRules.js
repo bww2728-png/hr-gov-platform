@@ -44,6 +44,20 @@ function riyadhMinutesOfDay(d) {
   return hh * 60 + mm;
 }
 
+/** دقائق التأخير حسب الوردية: تجاوز (بداية الوردية + سماحيتها) — صفر ضمن السماحية */
+function computeLateMinsShift(checkIn, shift) {
+  if (!checkIn || !shift) return 0;
+  const deadline = (Number(shift.startMin) || 0) + (Number(shift.graceInMins) || 0);
+  return Math.max(0, riyadhMinutesOfDay(checkIn) - deadline);
+}
+
+/** دقائق الانصراف المبكر حسب الوردية (قبل نهايتها) */
+function computeEarlyMinsShift(checkOut, shift) {
+  if (!checkOut || !shift) return 0;
+  const endMin = Number(shift.endMin) || 0;
+  return Math.max(0, endMin - riyadhMinutesOfDay(checkOut));
+}
+
 /** دقائق التأخير: تجاوز (بداية الدوام + السماحية) — صفر ضمن السماحية */
 function computeLateMins(checkIn, win = getWorkWindow()) {
   if (!checkIn) return 0;
@@ -81,8 +95,10 @@ async function escalateIncident({ employeeId, type, date, minsLate = null, hasEx
 }
 
 /**
- * مسح الغياب التلقائي لليوم الحالي بتوقيت الرياض.
+ * مسح الغياب التلقائي لليوم الحالي بتوقيت الرياض — واعٍ بالورديات (P0-07).
  * Idempotent بطبيعته: لا يلمس إلا من ليس له سجل حضور اليوم — إعادة التشغيل لا تكرر شيئاً.
+ * لكل موظف: عطلة رسمية → تخطٍ (الكل)؛ يوم راحة حسب وردية → تخطٍ؛ إجازة معتمدة → "leave"؛
+ * لصد غير القص حسب (بداية الوردية + absenceAfterHours).
  * يعيد ملخصاً: { date, cutoffAt, createdAbsent, createdLeave, skipped }
  */
 async function runAbsenceSweep({ actorId = null } = {}) {
@@ -92,27 +108,32 @@ async function runAbsenceSweep({ actorId = null } = {}) {
   }
   const now = new Date();
   const dayStart = riyadhDayStart(now);
-  const dow = dayStart.getUTCDay();
-  if (dow === 5 || dow === 6) {
-    return { skipped: 'weekend', reason: 'الجمعة/السبت راحة أسبوعية' };
-  }
-  // لحظة القص بتوقيت الرياض: (بداية الدوام + N ساعة) — الرياض = UTC+3
-  const cutoff = new Date(dayStart.getTime() + (win.startHour + win.absenceAfterHours - 3) * 3600000);
-  if (now < cutoff) {
-    return { skipped: 'before-cutoff', cutoffAt: cutoff.toISOString() };
+
+  // عطلة رسمية تغطي اليوم → لا غياب لأحد
+  const holiday = await prisma.officialHoliday.findFirst({
+    where: { startDate: { lte: dayStart }, endDate: { gte: dayStart } },
+  });
+  if (holiday) {
+    return { skipped: 'official-holiday', reason: `عطلة رسمية: ${holiday.nameAr}`, date: dayStart.toISOString() };
   }
 
   const activeEmployees = await prisma.employee.findMany({
     where: { employmentStatus: 'active', hireDate: { lte: dayStart } },
-    select: { id: true },
+    select: { id: true, fullNameAr: true, deptId: true, branchId: true },
   });
+  if (!activeEmployees.length) return { date: dayStart.toISOString(), createdAbsent: 0, createdLeave: 0 };
+
+  // حل الورديات الفعّالة دفعة واحدة (موظف ← قسم ← فرع ← رمضان ← افتراضية)
+  const { resolveShiftsBulk, isWorkDay } = require('./shiftResolver');
+  const resolvedMap = await resolveShiftsBulk(activeEmployees, dayStart);
+
   const existing = await prisma.attendanceRecord.findMany({
     where: { date: dayStart, employeeId: { in: activeEmployees.map((e) => e.id) } },
     select: { employeeId: true },
   });
   const hasRecord = new Set(existing.map((r) => r.employeeId));
   const missing = activeEmployees.filter((e) => !hasRecord.has(e.id));
-  if (!missing.length) return { date: dayStart.toISOString(), cutoffAt: cutoff.toISOString(), createdAbsent: 0, createdLeave: 0 };
+  if (!missing.length) return { date: dayStart.toISOString(), createdAbsent: 0, createdLeave: 0 };
 
   // إجازات معتمدة تغطي اليوم → سجل "إجازة" بلا مخالفة
   const leaves = await prisma.leaveRequest.findMany({
@@ -126,30 +147,41 @@ async function runAbsenceSweep({ actorId = null } = {}) {
   });
   const onLeave = new Set(leaves.map((l) => l.employeeId));
 
-  let createdAbsent = 0; let createdLeave = 0;
+  let createdAbsent = 0; let createdLeave = 0; let skippedDay = 0;
   for (const emp of missing) {
+    const eff = resolvedMap.get(emp.id) || { shift: null, source: 'default' };
+    const shift = eff.shift;
+    if (!shift || !isWorkDay(shift, dayStart)) { skippedDay += 1; continue; }
+
+    // لحظة القص لهذه الوردية: (بداية الوردية + absenceAfterHours ساعة) بتوقيت الرياض = UTC-3 من منتصف الليل
+    const absenceAfterMins = win.absenceAfterHours * 60;
+    const cutoff = new Date(dayStart.getTime() + ((Number(shift.startMin) || 0) + absenceAfterMins - 180) * 60000);
+    if (now < cutoff) { skippedDay += 1; continue; }
+
     if (onLeave.has(emp.id)) {
       await prisma.attendanceRecord.create({
-        data: { employeeId: emp.id, date: dayStart, method: 'auto', status: 'leave', notes: 'كشف تلقائي: إجازة معتمدة' },
+        data: { employeeId: emp.id, date: dayStart, method: 'auto', status: 'leave', notes: `كشف تلقائي: إجازة معتمدة (${shift.code})` },
       });
       createdLeave += 1;
       continue;
     }
+    const cParts = riyadhParts(cutoff);
     await prisma.attendanceRecord.create({
-      data: { employeeId: emp.id, date: dayStart, method: 'auto', status: 'absent', notes: `كشف تلقائي: لم يسجل حضوراً حتى ${win.startHour + win.absenceAfterHours}:00` },
+      data: { employeeId: emp.id, date: dayStart, method: 'auto', status: 'absent', notes: `كشف تلقائي: لم يسجل حضوراً حتى ${String(cParts.hh).padStart(2, '0')}:${String(cParts.mm).padStart(2, '0')} (وردية ${shift.code})` },
     });
     const incident = await escalateIncident({ employeeId: emp.id, type: 'absence', date: dayStart, resolvedById: actorId });
     await prisma.auditLog.create({
       data: {
         userId: actorId ?? null, action: 'attendance.auto_absence',
         entityType: 'attendance_record', entityId: String(incident.id),
-        afterJson: { employeeId: emp.id, date: dayStart.toISOString(), occurrence: incident.occurrence, action: incident.action },
-        reason: 'كشف الغياب التلقائي (node-cron)',
+        afterJson: { employeeId: emp.id, date: dayStart.toISOString(), occurrence: incident.occurrence, action: incident.action, shift: shift.code, source: eff.source },
+        reason: 'كشف الغياب التلقائي (node-cron) — واعٍ بالورديات',
       },
     }).catch(() => {});
     createdAbsent += 1;
   }
-  return { date: dayStart.toISOString(), cutoffAt: cutoff.toISOString(), createdAbsent, createdLeave, totalMissing: missing.length };
+  const firstCutoff = new Date(dayStart.getTime() + (win.startHour + win.absenceAfterHours - 3) * 3600000);
+  return { date: dayStart.toISOString(), cutoffAt: firstCutoff.toISOString(), createdAbsent, createdLeave, skippedShiftDay: skippedDay, totalMissing: missing.length };
 }
 
-module.exports = { getWorkWindow, riyadhParts, riyadhDayStart, riyadhMinutesOfDay, computeLateMins, computeEarlyMins, escalateIncident, runAbsenceSweep };
+module.exports = { getWorkWindow, riyadhParts, riyadhDayStart, riyadhMinutesOfDay, computeLateMins, computeEarlyMins, computeLateMinsShift, computeEarlyMinsShift, escalateIncident, runAbsenceSweep };

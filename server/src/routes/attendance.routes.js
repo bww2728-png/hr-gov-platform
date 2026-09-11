@@ -46,29 +46,54 @@ router.post('/records', requirePerm('attendance.write'), async (req, res, next) 
       notes: z.string().max(500).optional().nullable(),
     }).parse(req.body);
 
-    let lateMins = 0; let workedHours = 0;
+    let lateMins = 0; let workedHours = 0; let earlyMins = 0;
     const ci = data.checkIn ? new Date(data.checkIn) : null;
     const co = data.checkOut ? new Date(data.checkOut) : null;
-    if (ci) {
-      lateMins = rules.computeLateMins(ci);
+    const recDate = new Date(data.date);
+    if (ci || co) {
+      // الحساب حسب الوردية الفعّالة لموظف في تاريخ السجل (احتياطياً النافذة العامة)
+      const emp = await prisma.employee.findUnique({ where: { id: data.employeeId }, select: { id: true, deptId: true, branchId: true } });
+      let shift = null;
+      if (emp) {
+        const shiftResolver = require('../utils/shiftResolver');
+        shift = (await shiftResolver.resolveShift(emp, recDate)).shift;
+      }
+      if (ci) lateMins = shift ? rules.computeLateMinsShift(ci, shift) : rules.computeLateMins(ci);
+      if (co) earlyMins = shift ? rules.computeEarlyMinsShift(co, shift) : rules.computeEarlyMins(co);
     }
     if (ci && co) workedHours = Math.round(((co - ci) / 3600000) * 100) / 100;
 
     const record = await prisma.attendanceRecord.upsert({
-      where: { employeeId_date: { employeeId: data.employeeId, date: new Date(data.date) } },
+      where: { employeeId_date: { employeeId: data.employeeId, date: recDate } },
       create: {
-        employeeId: data.employeeId, date: new Date(data.date),
+        employeeId: data.employeeId, date: recDate,
         checkIn: ci, checkOut: co, method: data.method, status: data.status,
-        lateMins, workedHours, notes: data.notes || null,
+        lateMins, workedHours, earlyMins, notes: data.notes || null,
       },
-      update: { checkIn: ci, checkOut: co, method: data.method, status: data.status, lateMins, workedHours, notes: data.notes || null },
+      update: { checkIn: ci, checkOut: co, method: data.method, status: data.status, lateMins, workedHours, earlyMins, notes: data.notes || null },
     });
     audit(req, 'attendance.record.upsert', { entityType: 'attendance_record', entityId: String(record.id), afterJson: record });
     res.status(201).json({ record });
   } catch (e) { next(e); }
 });
 
-// تسجيل ذاتي (بصمة/GPS من الواجهة)
+/** ملخص ساعات العمل الأسبوعية (آخر 7 أيام) + تحذير سقف الوردية */
+async function weeklyHours(empId, shift) {
+  const to = new Date();
+  const from = rules.riyadhDayStart(new Date(to.getTime() - 7 * 86400000));
+  const agg = await prisma.attendanceRecord.aggregate({
+    _sum: { workedHours: true },
+    where: { employeeId: empId, date: { gte: from }, workedHours: { not: null } },
+  });
+  const hours = Math.round((agg._sum.workedHours || 0) * 100) / 100;
+  const cap = Number(shift?.weeklyHourCap) || 45;
+  const warnings = [];
+  if (hours >= cap * 0.9 && hours < cap) warnings.push(`اقتراب من حد الساعات الأسبوعية: ${hours}/${cap} ساعة`);
+  else if (hours >= cap) warnings.push(`تجاوز حد الساعات الأسبوعية: ${hours}/${cap} ساعة`);
+  return { hours, cap, warnings };
+}
+
+// تسجيل ذاتي (بصمة/GPS من الواجهة) — واعٍ بالوردية الفعّالة (P0-01/07/09)
 router.post('/check-in', async (req, res, next) => {
   try {
     const empId = selfId(req);
@@ -76,15 +101,72 @@ router.post('/check-in', async (req, res, next) => {
     const method = z.enum(['fingerprint', 'gps', 'card', 'manual']).parse(req.body?.method || 'gps');
     const now = new Date();
     const today = rules.riyadhDayStart(now);
-    const lateMins = rules.computeLateMins(now);
+
+    const emp = await prisma.employee.findUnique({
+      where: { id: empId }, select: { id: true, salary: true, deptId: true, branchId: true },
+    });
+    if (!emp) return res.status(400).json({ error: 'ملف الموظف غير موجود' });
+
+    const shiftResolver = require('../utils/shiftResolver');
+    const eff = await shiftResolver.resolveShift(emp, today);
+    const shift = eff.shift;
+    const warnings = [];
+
+    // 1) يوم راحة أسبوعي حسب الوردية؟
+    if (!shiftResolver.isWorkDay(shift, today)) {
+      return res.status(403).json({ error: `اليوم راحة حسب الوردية (${shift.nameAr}) — أيام العمل: ${shift.workDays.map((d) => ['الأحد','الاثنين','الثلاثاء','الأربعاء','الخميس','الجمعة','السبت'][d]).join('، ')}` });
+    }
+    // 2) عطلة رسمية؟ (مسموح فقط لورديات allowHolidayCheckIn)
+    const holiday = await shiftResolver.officialHoliday(today);
+    if (holiday && !shift.allowHolidayCheckIn) {
+      return res.status(403).json({ error: `اليوم عطلة رسمية (${holiday.nameAr}) — التسجيل غير مسموح حسب الوردية (${shift.nameAr})` });
+    }
+    // 3) إجازة معتمدة تغطي اليوم؟
+    const leave = await prisma.leaveRequest.findFirst({
+      where: { employeeId: empId, status: 'approved', startDate: { lte: today }, endDate: { gte: today } },
+      select: { id: true, leaveType: true },
+    });
+    if (leave) {
+      return res.status(403).json({ error: 'لديك إجازة معتمدة تغطي اليوم — التسجيل غير مسموح، راجع إدارة الموارد البشرية إذا كنت فعلاً في العمل' });
+    }
+    // 4) نافذة التسجيل: قبل (بداية - نافذة) وبعد نهاية الوردية
+    const mins = rules.riyadhMinutesOfDay(now);
+    const windowBefore = Number(shift.checkInWindowBeforeMins) || 60;
+    const windowAfter = Number(shift.checkInWindowAfterMins) || 120;
+    const windowFrom = (Number(shift.startMin) || 0) - windowBefore;
+    if (mins < windowFrom) {
+      return res.status(403).json({ error: `نافذة تسجيل الحضور تبدأ ${String(Math.floor(Math.max(0, windowFrom) / 60)).padStart(2, '0')}:${String(windowFrom % 60 < 0 ? 0 : windowFrom % 60).padStart(2, '0')} حسب الوردية (${shift.nameAr})` });
+    }
+    if (mins > (Number(shift.endMin) || 1440)) {
+      return res.status(403).json({ error: `انتهى وقت تسجيل الحضور (نهاية الوردية ${shift.nameAr})` });
+    }
+    // 5) التأخير حسب الوردية (بداية + سماحيتها)
+    const lateMins = rules.computeLateMinsShift(now, shift);
+    const worked = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId: empId, date: today } } });
+    if (worked && worked.checkOut) return res.status(409).json({ error: 'تم تسجيل انصراف اليوم — لا يمكن إعادة الحضور' });
 
     const record = await prisma.attendanceRecord.upsert({
       where: { employeeId_date: { employeeId: empId, date: today } },
       create: { employeeId: empId, date: today, checkIn: now, method, lateMins, status: 'present' },
       update: { checkIn: now, method, lateMins, status: 'present' },
     });
-    audit(req, 'attendance.check_in', { entityType: 'attendance_record', entityId: String(record.id) });
-    res.status(201).json({ record, lateMins });
+    // 6) مخالفة تأخر فوق السماحية — نفس سلم التصعيد المشترك
+    if (lateMins > 0) {
+      const incident = await rules.escalateIncident({ employeeId: empId, type: 'late', date: today, minsLate: lateMins });
+      warnings.push(`مخالفة تأخر (${incident.occurrence}): ${lateMins} دقيقة فوق السماحية ${shift.graceInMins}د`);
+    }
+    // 7) قيمة الخصم اللحظية
+    const deduction = saudi.lateDeduction(lateMins, Number(emp.salary) || 0, shift.lateDeductionMultiplier || policyStore.get('attendance.lateDeductionMultiplier'), policyStore.get('payroll.hourlyDivisor'));
+    const weekly = await weeklyHours(empId, shift);
+    warnings.push(...weekly.warnings);
+
+    audit(req, 'attendance.check_in', { entityType: 'attendance_record', entityId: String(record.id), afterJson: { lateMins, shift: shift.code, source: eff.source } });
+    res.status(201).json({
+      record, lateMins,
+      shift: { code: shift.code, nameAr: shift.nameAr, startMin: shift.startMin, endMin: shift.endMin, graceInMins: shift.graceInMins, source: eff.source },
+      lateDeduction: Math.round(deduction * 100) / 100,
+      warnings,
+    });
   } catch (e) { next(e); }
 });
 
@@ -96,14 +178,30 @@ router.post('/check-out', async (req, res, next) => {
     const today = rules.riyadhDayStart(now);
     const existing = await prisma.attendanceRecord.findUnique({ where: { employeeId_date: { employeeId: empId, date: today } } });
     if (!existing || !existing.checkIn) return res.status(400).json({ error: 'لم يتم تسجيل حضور اليوم' });
+    if (existing.checkOut) return res.status(409).json({ error: 'تم تسجيل الانصراف مسبقاً' });
+
+    const emp = await prisma.employee.findUnique({ where: { id: empId }, select: { id: true, deptId: true, branchId: true } });
+    const shiftResolver = require('../utils/shiftResolver');
+    const eff = emp ? await shiftResolver.resolveShift(emp, today) : { shift: shiftResolver.defaultShift(), source: 'default' };
+    const shift = eff.shift;
+
     const workedHours = Math.round(((now - existing.checkIn) / 3600000) * 100) / 100;
-    const earlyMins = rules.computeEarlyMins(now);
+    const earlyMins = rules.computeEarlyMinsShift(now, shift);
+    const warnings = [];
     const record = await prisma.attendanceRecord.update({
       where: { id: existing.id },
       data: { checkOut: now, workedHours, earlyMins },
     });
-    audit(req, 'attendance.check_out', { entityType: 'attendance_record', entityId: String(record.id) });
-    res.json({ record, workedHours, earlyMins });
+    // انصراف مبكر فوق عتبة الوردية → مخالفة بنفس السلم
+    if (earlyMins > (Number(shift.earlyLeaveThresholdMins) || 0)) {
+      const incident = await rules.escalateIncident({ employeeId: empId, type: 'early_leave', date: today });
+      warnings.push(`مخالفة انصراف مبكر (${incident.occurrence}): ${earlyMins} دقيقة قبل نهاية الوردية (${shift.nameAr})`);
+    }
+    const weekly = await weeklyHours(empId, shift);
+    warnings.push(...weekly.warnings);
+
+    audit(req, 'attendance.check_out', { entityType: 'attendance_record', entityId: String(record.id), afterJson: { earlyMins, shift: shift.code, source: eff.source } });
+    res.json({ record, workedHours, earlyMins, warnings });
   } catch (e) { next(e); }
 });
 
@@ -121,7 +219,7 @@ router.get('/work-window', async (req, res, next) => {
         where: { employeeId_date: { employeeId: empId, date: today } },
         select: { lateMins: true },
       });
-      const emp = await prisma.employee.findUnique({ where: { id: empId }, select: { salary: true } });
+      const emp = await prisma.employee.findUnique({ where: { id: empId }, select: { id: true, salary: true, deptId: true, branchId: true } });
       const lateMins = rec?.lateMins || 0;
       const deduction = saudi.lateDeduction(
         lateMins,
@@ -130,6 +228,16 @@ router.get('/work-window', async (req, res, next) => {
         policyStore.get('payroll.hourlyDivisor')
       );
       out.todayLate = { mins: lateMins, deduction: Math.round(deduction * 100) / 100 };
+      if (emp) {
+        const shiftResolver = require('../utils/shiftResolver');
+        const eff = await shiftResolver.resolveShift(emp, today);
+        out.shift = {
+          code: eff.shift.code, nameAr: eff.shift.nameAr,
+          startMin: eff.shift.startMin, endMin: eff.shift.endMin,
+          graceInMins: eff.shift.graceInMins, source: eff.source,
+          isWorkDay: shiftResolver.isWorkDay(eff.shift, today),
+        };
+      }
     }
     res.json(out);
   } catch (e) { next(e); }
