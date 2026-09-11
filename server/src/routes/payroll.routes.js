@@ -543,7 +543,12 @@ router.get('/wps/notifications', requirePerm('wps.read'), async (req, res, next)
  */
 router.post('/wps/generate', requirePerm('wps.write'), async (req, res, next) => {
   try {
-    const { month, year } = z.object({ month: z.number().int().min(1).max(12), year: z.number().int() }).parse(req.body);
+    const { month, year, acknowledge } = z.object({
+      month: z.number().int().min(1).max(12), year: z.number().int(),
+      // مسيرات مدفوعة بالمحرك القديم: الفروقات حقيقة تاريخية لا تُصلح (مقفول 403) —
+      // الرفع يتطلب إقراراً صريحاً موثقاً بالتدقيق، والفروقات تعاد في الرد للتصحيح بالمسير القادم
+      acknowledge: z.boolean().optional().default(false),
+    }).parse(req.body);
     const run = await prisma.payrollRun.findUnique({ where: { month_year: { month, year } }, include: { items: true } });
     if (!run || !['approved', 'paid'].includes(run.status)) {
       return res.status(400).json({ error: 'لا يوجد مسير معتمد لهذا الشهر لتوليد ملف WPS' });
@@ -574,8 +579,11 @@ router.post('/wps/generate', requirePerm('wps.write'), async (req, res, next) =>
       contractChecks.push({ employeeId: emp.id, name: emp.fullNameAr, status: 'unavailable', note: 'غير مربوط — بانتظار اعتماد بيانات قوى' });
     }
     if (mismatches.length) {
-      audit(req, 'wps.generate.blocked', { entityType: 'payroll_run', entityId: String(run.id), afterJson: { mismatches } });
-      return res.status(409).json({ error: 'فروقات في المطابقة الثلاثية — منع الرفع', mismatches });
+      if (!acknowledge) {
+        audit(req, 'wps.generate.blocked', { entityType: 'payroll_run', entityId: String(run.id), afterJson: { mismatches } });
+        return res.status(409).json({ error: 'فروقات في المطابقة الثلاثية — منع الرفع؛ راجع الفروقات وصرّح بإقرارها إن كانت تاريخية (مسير مدفوع بالمحرك القديم)', mismatches });
+      }
+      audit(req, 'wps.generate.acknowledged', { entityType: 'payroll_run', entityId: String(run.id), afterJson: { mismatches, note: 'رفع بإقرار صريح بفروقات تاريخية — تُصحح بالمسير القادم' } });
     }
     if (missingIban.length) {
       return res.status(409).json({ error: 'موظفون بلا IBAN — لا يمكن توليد الملف', employees: missingIban });
