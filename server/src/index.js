@@ -13,6 +13,9 @@ require('./utils/policyStore').load().catch((e) => console.error('[policyStore] 
 // كشف الغياب التلقائي — كل 30 دقيقة، محكوم بمعامل workHours.absenceAfterHours
 require('./jobs/absenceJob').startAbsenceJob();
 
+// تنبيهات حماية الأجور اليومية (08:00 الرياض) — مواعيد WPS والعقوبات المتوقعة
+require('./jobs/wpsJob').startWpsJob();
+
 const host = config.host;
 const port = config.port;
 server.listen(port, host, () => {

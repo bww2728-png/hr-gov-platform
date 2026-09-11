@@ -51,6 +51,7 @@ const ROLE_PERMS = {
     'leaves.approve', 'overtime.approve', 'attendance.incidents.write',
     'perf.review.write', 'perf.okr.write', 'idp.read', 'idp.write',
     'talent.nominate', 'bonuses.nominate',
+    'adjustments.request', 'adjustments.read',
     'stay_interview.write',
   ],
 
@@ -114,6 +115,7 @@ const ROLE_PERMS = {
     'payroll.read', 'payroll.prepare', 'payroll.review',
     'payroll.items.write', 'payroll.payslips.read',
     'wps.read', 'wps.write',
+    'adjustments.request', 'adjustments.read',
     'loans.read', 'loans.write', 'loans.approve',
     'bonuses.read', 'bonuses.process',
     'eos.calculate', 'eos.read',
@@ -160,6 +162,8 @@ const ROLE_PERMS = {
     'shifts.read', 'shifts.write',
     'payroll.read', 'payroll.prepare', 'payroll.approve',
     'gosi.read', 'gosi.write', 'insurance.read', 'insurance.write',
+    'wps.read', 'wps.write',
+    'adjustments.request', 'adjustments.read', 'adjustments.finance',
     'knowledge.doc.read', 'knowledge.doc.write', 'knowledge.doc.publish',
     'knowledge.policy.read', 'knowledge.policy.write',
     'knowledge.decision.read', 'knowledge.decision.write',
@@ -200,6 +204,7 @@ const ROLE_PERMS = {
     'bonuses.read', 'bonuses.approve',
     'eos.read', 'eos.calculate',
     'wps.read', 'gosi.read', 'insurance.read',
+    'adjustments.request', 'adjustments.read', 'adjustments.finance',
     'banks.reconcile',
     // الميزانية
     'budget.manage', 'budget.approve',
@@ -235,6 +240,7 @@ const ROLE_PERMS = {
     'saudization.approve', 'exceptions.approve', 'contracts.strategic.approve',
     'hiring.approve', 'termination.approve', 'promotion.approve', 'bonus.approve',
     'payroll.approve',
+    'adjustments.read', 'adjustments.ceo',
     // الحوكمة — CEO يعتمد هيكل الرواتب والتغييرات الاستراتيجية
     'governance.read', 'governance.approve',
     'formulas.read', 'formulas.approve',
@@ -389,6 +395,11 @@ const PERMISSIONS = {
   bonuses: { nameAr: 'المكافآت', nameEn: 'Bonuses', actions: { 'read': 'قراءة', 'nominate': 'ترشيح', 'process': 'معالجة', 'approve': 'اعتماد' } },
   eos: { nameAr: 'نهاية الخدمة', nameEn: 'EOS', actions: { 'read': 'قراءة', 'calculate': 'حساب المكافأة' } },
   wps: { nameAr: 'حماية الأجور', nameEn: 'WPS', actions: { 'read': 'قراءة', 'write': 'توليد ورفع ملفات' } },
+  adjustments: {
+    nameAr: 'تعديلات الفترات', nameEn: 'Period Adjustments',
+    actions: { 'read': 'قراءة الطلبات', 'request': 'طلب تعديل فترة', 'finance': 'اعتماد مالي', 'ceo': 'اعتماد نهائي' },
+  },
+  notifications: { nameAr: 'التنبيهات', nameEn: 'Notifications', actions: { 'read': 'قراءة التنبيهات' } },
   gosi: { nameAr: 'التأمينات', nameEn: 'GOSI', actions: { 'read': 'قراءة', 'write': 'تسجيل/إدارة' } },
   insurance: { nameAr: 'التأمين الصحي', nameEn: 'Health Insurance', actions: { 'read': 'قراءة', 'write': 'إدارة الوثائق والأعضاء' } },
   perf: {
