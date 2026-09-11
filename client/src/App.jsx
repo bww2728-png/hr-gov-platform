@@ -27,6 +27,7 @@ import Settings from './pages/Settings';
 import MyHub from './pages/MyHub';
 import Leaves from './pages/Leaves';
 import Attendance from './pages/Attendance';
+import Shifts from './pages/Shifts';
 import Payroll from './pages/Payroll';
 import Performance from './pages/Performance';
 import Learning from './pages/Learning';
@@ -73,6 +74,7 @@ function AppRoutes() {
                 <Route path="/requests" element={<Requests />} />
                 <Route path="/leaves" element={<Leaves />} />
                 <Route path="/attendance" element={<Attendance />} />
+                <Route path="/shifts" element={<Shifts />} />
                 <Route path="/payroll" element={<Payroll />} />
                 <Route path="/performance" element={<Performance />} />
                 <Route path="/learning" element={<Learning />} />

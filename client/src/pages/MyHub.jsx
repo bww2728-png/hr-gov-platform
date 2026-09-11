@@ -51,7 +51,14 @@ export default function MyHub() {
 
   function checkIn() {
     client.post('/attendance/check-in', { method: 'gps' })
-      .then(({ data }) => { toast.success(`تم تسجيل الحضور${data.lateMins ? ` — تأخير ${data.lateMins} دقيقة` : ''}`); load(); })
+      .then(({ data }) => {
+        const late = data.lateMins ? ` — تأخير ${data.lateMins} دقيقة` : '';
+        const ded = data.lateDeduction > 0 ? ` — قيمة الخصم ${data.lateDeduction} ر.س` : '';
+        toast.success(`تم تسجيل الحضور${late}${ded}`);
+        if (data.shift?.source) toast.info(`الوردية الفعّالة: ${data.shift.nameAr}`);
+        (data.warnings || []).forEach((w) => toast.warn(w));
+        load();
+      })
       .catch((e) => toast.error(e.response?.data?.error || 'فشل'));
   }
   function checkOut() {
@@ -59,6 +66,7 @@ export default function MyHub() {
       .then(({ data }) => {
         const early = data.earlyMins > 0 ? ` — انصراف مبكر ${data.earlyMins} دقيقة` : '';
         toast.success(`تم تسجيل الانصراف — ${data.workedHours} ساعة${early}`);
+        (data.warnings || []).forEach((w) => toast.warn(w));
         load();
       })
       .catch((e) => toast.error(e.response?.data?.error || 'فشل'));
@@ -95,8 +103,17 @@ export default function MyHub() {
           <div className="muted mb-2">حضور اليوم</div>
           {workWindow && (
             <div className="text-xs text-ink-500 mb-2">
-              الدوام: {fmtH(workWindow.startHour)} — {fmtH(workWindow.endHour)}
-              {workWindow.lateGraceMins > 0 ? ` (سماحية ${workWindow.lateGraceMins} دقيقة)` : ''}
+              {workWindow.shift ? (
+                <>
+                  الوردية: <b className="font-mono">{workWindow.shift.code}</b> — {workWindow.shift.nameAr}
+                  {' '}(من {fmtH(Math.floor(workWindow.shift.startMin / 60))} إلى {fmtH(Math.floor(workWindow.shift.endMin / 60) % 24)}
+                  {workWindow.shift.graceInMins > 0 ? `، سماحية ${workWindow.shift.graceInMins}د` : ''})
+                </>
+              ) : (
+                <>الدوام: {fmtH(workWindow.startHour)} — {fmtH(workWindow.endHour)}
+                {workWindow.lateGraceMins > 0 ? ` (سماحية ${workWindow.lateGraceMins} دقيقة)` : ''}</>
+              )}
+              {workWindow.shift && !workWindow.shift.isWorkDay && <div className="text-warn-600">اليوم راحة حسب الوردية</div>}
             </div>
           )}
           {todayRecord ? (

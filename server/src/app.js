@@ -18,6 +18,7 @@ const adminRoutes = require('./routes/admin.routes');
 const lookupsRoutes = require('./routes/lookups.routes');
 const leavesRoutes = require('./routes/leaves.routes');
 const attendanceRoutes = require('./routes/attendance.routes');
+const shiftsRoutes = require('./routes/shifts.routes');
 const payrollRoutes = require('./routes/payroll.routes');
 const performanceRoutes = require('./routes/performance.routes');
 const lndRoutes = require('./routes/lnd.routes');
@@ -135,6 +136,7 @@ function createApp() {
   app.use('/api/lookups', lookupsRoutes);
   app.use('/api/leaves', leavesRoutes);
   app.use('/api/attendance', attendanceRoutes);
+  app.use('/api/shifts', shiftsRoutes);
   app.use('/api/payroll', payrollRoutes);
   app.use('/api/perf', performanceRoutes);
   app.use('/api/lnd', lndRoutes);

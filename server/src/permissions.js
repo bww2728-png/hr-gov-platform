@@ -71,9 +71,10 @@ const ROLE_PERMS = {
     'lifecycle.onboarding.read', 'lifecycle.onboarding.write',
     'lifecycle.exit.read', 'lifecycle.exit.write',
     'probation.read', 'probation.write',
-    // الإجازات والحضور
+    // الإجازات والحضور والورديات
     'leaves.read', 'leaves.approve.hr', 'leaves.balances.write',
     'attendance.read', 'attendance.write',
+    'shifts.read', 'shifts.write',
     // رواتب (مسودات قبل الاعتماد)
     'payroll.read', 'payroll.prepare',
     // التأمينات والتأمين الصحي
@@ -156,6 +157,7 @@ const ROLE_PERMS = {
     'probation.read', 'probation.write',
     'leaves.read', 'leaves.approve.hr', 'leaves.balances.write',
     'attendance.read', 'attendance.write',
+    'shifts.read', 'shifts.write',
     'payroll.read', 'payroll.prepare', 'payroll.approve',
     'gosi.read', 'gosi.write', 'insurance.read', 'insurance.write',
     'knowledge.doc.read', 'knowledge.doc.write', 'knowledge.doc.publish',
@@ -370,6 +372,10 @@ const PERMISSIONS = {
   attendance: {
     nameAr: 'الحضور', nameEn: 'Attendance',
     actions: { 'read': 'قراءة السجلات', 'write': 'تسجيل/تعديل', 'incidents.write': 'معالجة تأخر/غياب' },
+  },
+  shifts: {
+    nameAr: 'الورديات', nameEn: 'Shifts',
+    actions: { 'read': 'قراءة الورديات والتعيينات', 'write': 'إدارة الورديات والتعيينات' },
   },
   overtime: { nameAr: 'العمل الإضافي', nameEn: 'Overtime', actions: { 'read': 'قراءة', 'approve': 'اعتماد' } },
   payroll: {
