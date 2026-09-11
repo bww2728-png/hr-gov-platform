@@ -21,6 +21,9 @@ export default function Payroll() {
   const [eosForm, setEosForm] = useState({ employeeId: '', reason: 'resignation' });
   const [eosResult, setEosResult] = useState(null);
   const [employees, setEmployees] = useState([]);
+  const [wpsRows, setWpsRows] = useState([]);
+  const [adjustments, setAdjustments] = useState([]);
+  const [adjForm, setAdjForm] = useState({ payrollRunId: '', reason: '', items: [{ employeeId: '', kind: 'reversal_loan', amount: '', note: '' }] });
 
   const canPrepare = hasAny('payroll.prepare');
   const canReview = hasAny('payroll.review');
@@ -33,6 +36,8 @@ export default function Payroll() {
     client.get('/payroll/eos').then(({ data }) => setEosList(data.calculations)).catch(() => {});
     client.get('/payroll/wps').then(({ data }) => setWpsFiles(data.files)).catch(() => {});
     client.get('/hr/employees').then(({ data }) => setEmployees(data.employees || [])).catch(() => {});
+    client.get('/payroll/wps/dashboard').then(({ data }) => setWpsRows(data.rows)).catch(() => {});
+    client.get('/payroll/adjustments').then(({ data }) => setAdjustments(data.adjustments)).catch(() => {});
   }
   useEffect(load, []);
 
@@ -65,11 +70,39 @@ export default function Payroll() {
       .then(({ data }) => { setEosResult(data); load(); })
       .catch((err) => toast.error(err.response?.data?.error || 'فشل'));
   }
-  function genWps() {
-    const run = runs.find((r) => ['approved', 'paid'].includes(r.status));
+  function genWps(month, year) {
+    const run = month ? { month, year } : runs.find((r) => ['approved', 'paid'].includes(r.status));
     if (!run) return toast.error('لا يوجد مسير معتمد');
     client.post('/payroll/wps/generate', { month: run.month, year: run.year })
-      .then(() => { toast.success('تم توليد ملف WPS'); load(); })
+      .then(({ data }) => {
+        toast.success(`تم توليد ملف SIF/WPS (${data.recordCount} سجل)`);
+        // تنزيل الملف تلقائياً (CSV بترميز UTF-8 مع BOM من الخادم)
+        const blob = new Blob([data.csv], { type: 'text/csv;charset=utf-8' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = data.file?.fileRef || `SIF-${run.year}-${String(run.month).padStart(2, '0')}.csv`;
+        a.click(); URL.revokeObjectURL(url);
+        load();
+      })
+      .catch((err) => toast.error(err.response?.data?.error || 'فشل'));
+  }
+  function wpsStatus(id, status) {
+    client.post(`/payroll/wps/${id}/status`, { status }).then(() => { toast.success('تم تحديث الحالة'); load(); }).catch((err) => toast.error(err.response?.data?.error || 'فشل'));
+  }
+  function submitAdjustment(e) {
+    e.preventDefault();
+    const payload = {
+      payrollRunId: Number(adjForm.payrollRunId),
+      reason: adjForm.reason,
+      items: adjForm.items.filter((i) => i.employeeId && i.amount !== '').map((i) => ({ employeeId: i.employeeId, kind: i.kind, amount: Number(i.amount), note: i.note || undefined })),
+    };
+    client.post('/payroll/adjustments', payload)
+      .then(() => { toast.success('تم إرسال الطلب — بانتظار الاعتماد المالي'); setAdjForm({ payrollRunId: '', reason: '', items: [{ employeeId: '', kind: 'reversal_loan', amount: '', note: '' }] }); load(); })
+      .catch((err) => toast.error(err.response?.data?.error || 'فشل'));
+  }
+  function decideAdjustment(id, stage, decision) {
+    client.post(`/payroll/adjustments/${id}/${stage}`, { decision })
+      .then(() => { toast.success('تم'); load(); })
       .catch((err) => toast.error(err.response?.data?.error || 'فشل'));
   }
 
@@ -79,6 +112,7 @@ export default function Payroll() {
     { id: 'bonuses', label: `المكافآت (${bonuses.length})` },
     { id: 'eos', label: 'نهاية الخدمة' },
     { id: 'wps', label: 'حماية الأجور WPS' },
+    { id: 'adjustments', label: `تعديلات الفترات (${adjustments.length})` },
   ];
 
   return (
@@ -261,22 +295,125 @@ export default function Payroll() {
       )}
 
       {tab === 'wps' && (
-        <div className="card-padded space-y-3">
-          {hasAny('wps.write') && <button onClick={genWps} className="btn-primary">توليد ملف WPS لآخر مسير معتمد</button>}
-          <div className="table-wrap">
-            <table>
-              <thead><tr><th>الفترة</th><th>المرجع</th><th>الحالة</th><th>التأكيد</th></tr></thead>
-              <tbody>
-                {wpsFiles.map((f) => (
-                  <tr key={f.id}>
-                    <td>{f.month}/{f.year}</td>
-                    <td className="text-xs">{f.fileRef}</td>
-                    <td><span className={f.status === 'confirmed' ? 'badge-success' : 'badge-warn'}>{{ generated: 'مولد', uploaded: 'مرفوع', confirmed: 'مؤكد', failed: 'فشل' }[f.status]}</span></td>
-                    <td className="text-xs text-ink-500">{f.confirmedAt ? new Date(f.confirmedAt).toLocaleDateString('ar-SA') : '—'}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        <div className="space-y-3">
+          <div className="card-padded">
+            <h2 className="h3 mb-3">لوحة المواعيد والعقوبات المتوقعة</h2>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>المسير</th><th>الحالة</th><th>WPS</th><th>الموعد النظامي</th><th>الأيام المتبقية</th><th>عدد الموظفين</th><th>العقوبة المتوقعة</th><th>إجراء</th></tr></thead>
+                <tbody>
+                  {wpsRows.map((r) => (
+                    <tr key={r.runId}>
+                      <td>{r.month}/{r.year}</td>
+                      <td><span className={r.status === 'paid' ? 'badge-success' : 'badge-primary'}>{RUN_STATUS[r.status]}</span></td>
+                      <td><span className={r.wpsStatus === 'accepted' ? 'badge-success' : r.wpsStatus === 'uploaded' ? 'badge-primary' : 'badge-warn'}>{{ pending: 'بانتظار التوليد', generated: 'مولد', uploaded: 'مرفوع', accepted: 'مقبول', rejected: 'مرفوض' }[r.wpsStatus]}</span></td>
+                      <td>{r.wpsDeadline ? String(r.wpsDeadline).slice(0, 10) : '—'}</td>
+                      <td className={r.daysLeft < 0 ? 'text-danger-600 font-bold' : r.daysLeft <= 5 ? 'text-warn-600' : ''}>{r.daysLeft == null ? '—' : r.daysLeft < 0 ? `متأخر ${-r.daysLeft} يوم` : `${r.daysLeft} يوم`}</td>
+                      <td>{r.employees}</td>
+                      <td className={r.penalty > 0 ? 'text-danger-600 font-bold' : 'text-ink-400'}>{r.penalty > 0 ? `${money(r.penalty)} (${r.penaltyBand}×موظف)` : 'لا شيء'}</td>
+                      <td>
+                        {['approved', 'paid'].includes(r.status) && hasAny('wps.write') && (
+                          <button onClick={() => genWps(r.month, r.year)} className="btn-primary text-xs">توليد SIF</button>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {!wpsRows.length && <tr><td colSpan={8} className="text-center text-ink-400">لا توجد مسيرات معتمدة</td></tr>}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          <div className="card-padded">
+            <h2 className="h3 mb-3">ملفات WPS المرفوعة</h2>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>الفترة</th><th>المرجع</th><th>الحالة</th><th>تاريخ الرفع</th><th>إجراء</th></tr></thead>
+                <tbody>
+                  {wpsFiles.map((f) => (
+                    <tr key={f.id}>
+                      <td>{f.month}/{f.year}</td>
+                      <td className="text-xs">{f.fileRef}</td>
+                      <td><span className={f.status === 'confirmed' ? 'badge-success' : 'badge-warn'}>{{ generated: 'مولد', uploaded: 'مرفوع', confirmed: 'مؤكد', failed: 'فشل' }[f.status]}</span></td>
+                      <td className="text-xs text-ink-500">{f.uploadedAt ? new Date(f.uploadedAt).toLocaleDateString('ar-SA') : '—'}</td>
+                      <td>
+                        {hasAny('wps.write') && f.status === 'generated' && <button onClick={() => wpsStatus(f.id, 'uploaded')} className="btn-primary text-xs">تم الرفع عبر قوى</button>}
+                        {hasAny('wps.write') && f.status === 'uploaded' && <button onClick={() => wpsStatus(f.id, 'confirmed')} className="btn-primary text-xs">تأكيد القبول</button>}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {tab === 'adjustments' && (
+        <div className="space-y-3">
+          {hasAny('adjustments.request') && (
+            <form onSubmit={submitAdjustment} className="card-padded space-y-2">
+              <h2 className="h3">طلب تعديل فترة مقفولة (HR ← مالي ← CEO)</h2>
+              <div className="text-xs text-ink-500">المسيرات المصروفة ممنوع تعديلها مباشرة — كل تصحيح يمر بهذا ال workflow ويولد قيود عكسية append-only في الدفتر.</div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                <select required value={adjForm.payrollRunId} onChange={(e) => setAdjForm({ ...adjForm, payrollRunId: e.target.value })} className="input">
+                  <option value="">اختر المسير المقفول…</option>
+                  {runs.filter((r) => ['paid', 'archived'].includes(r.status)).map((r) => <option key={r.id} value={r.id}>{r.code} ({r.month}/{r.year} — مصروف)</option>)}
+                </select>
+                <input required minLength={5} value={adjForm.reason} onChange={(e) => setAdjForm({ ...adjForm, reason: e.target.value })} className="input" placeholder="سبب التعديل (5 أحرف على الأقل)" />
+              </div>
+              {adjForm.items.map((item, idx) => (
+                <div key={idx} className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                  <select value={item.employeeId} onChange={(e) => { const items = [...adjForm.items]; items[idx] = { ...item, employeeId: e.target.value }; setAdjForm({ ...adjForm, items }); }} className="input">
+                    <option value="">الموظف…</option>
+                    {employees.map((emp) => <option key={emp.id} value={emp.id}>{emp.fullNameAr}</option>)}
+                  </select>
+                  <select value={item.kind} onChange={(e) => { const items = [...adjForm.items]; items[idx] = { ...item, kind: e.target.value }; setAdjForm({ ...adjForm, items }); }} className="input">
+                    <option value="reversal_loan">عكس قسط سلفة</option>
+                    <option value="reversal_bonus">عكس مكافأة</option>
+                    <option value="late_deduction">تصحيح خصم تأخر</option>
+                    <option value="absence_deduction">تصحيح خصم غياب</option>
+                    <option value="other">أخرى</option>
+                  </select>
+                  <input type="number" step="0.01" value={item.amount} onChange={(e) => { const items = [...adjForm.items]; items[idx] = { ...item, amount: e.target.value }; setAdjForm({ ...adjForm, items }); }} className="input" placeholder="المبلغ (سالب للعكس)" />
+                  <input value={item.note} onChange={(e) => { const items = [...adjForm.items]; items[idx] = { ...item, note: e.target.value }; setAdjForm({ ...adjForm, items }); }} className="input" placeholder="ملاحظة" />
+                </div>
+              ))}
+              <button className="btn-primary">إرسال الطلب</button>
+            </form>
+          )}
+          <div className="card-padded">
+            <h2 className="h3 mb-3">الطلبات ({adjustments.length})</h2>
+            <div className="table-wrap">
+              <table>
+                <thead><tr><th>المسير</th><th>السبب</th><th>الحالة</th><th>إجراء</th></tr></thead>
+                <tbody>
+                  {adjustments.map((a) => (
+                    <tr key={a.id}>
+                      <td>{a.run ? `${a.run.code} (${a.run.month}/${a.run.year})` : a.payrollRunId}</td>
+                      <td className="text-xs max-w-md">{a.reason}</td>
+                      <td><span className={a.status === 'approved' ? 'badge-success' : a.status === 'rejected' ? 'badge-danger' : 'badge-warn'}>{{ pending: 'بانتظار الاعتماد المالي', finance_approved: 'بانتظار اعتماد CEO', approved: 'معتمد — قيود عكسية', rejected: 'مرفوض' }[a.status]}</span></td>
+                      <td>
+                        <div className="flex gap-1">
+                          {a.status === 'pending' && hasAny('adjustments.finance') && (
+                            <>
+                              <button onClick={() => decideAdjustment(a.id, 'finance', 'approve')} className="btn-primary text-xs">اعتماد مالي</button>
+                              <button onClick={() => decideAdjustment(a.id, 'finance', 'reject')} className="btn-secondary text-xs">رفض</button>
+                            </>
+                          )}
+                          {a.status === 'finance_approved' && hasAny('adjustments.ceo') && (
+                            <>
+                              <button onClick={() => decideAdjustment(a.id, 'ceo', 'approve')} className="btn-primary text-xs">اعتماد نهائي</button>
+                              <button onClick={() => decideAdjustment(a.id, 'ceo', 'reject')} className="btn-secondary text-xs">رفض</button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                  {!adjustments.length && <tr><td colSpan={4} className="text-center text-ink-400">لا توجد طلبات</td></tr>}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}

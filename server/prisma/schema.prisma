@@ -2159,3 +2159,20 @@ model FormulaRevision {
   @@index([formulaCode])
   @@map("formula_revisions")
 }
+
+// ==== P0-04/05: تنبيهات النظام (WPS/المواعيد) — بث بالدور أو إشعار مستخدم ====
+model SystemNotification {
+  id        Int       @id @default(autoincrement())
+  userId    String?   @map("user_id") // فراغ = بث دوري
+  roleKey   String?   @map("role_key") // الدور المستهدف عند البث
+  kind      String @default("wps") // wps, deadline, system
+  title     String
+  body      String
+  link      String? // مسار الواجهة المقترح
+  readAt    DateTime? @map("read_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+
+  @@index([roleKey, createdAt])
+  @@index([userId, createdAt])
+  @@map("system_notifications")
+}
