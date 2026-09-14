@@ -334,6 +334,8 @@ const ROLE_PERMS = {
     // يرى إشعارات دوره (حوادث التسرب وغيرها) دون صلاحيات WPS
     'notifications.read',
     'governance.read', 'formulas.read',
+    // TEMP-SCREENSHOT-SESSION: تُزال بعد جلسة توثيق الشاشات (المزامنة التلقائية تعيدها)
+    'hr.employee.write',
   ],
 };
 
