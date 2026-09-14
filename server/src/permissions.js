@@ -335,7 +335,7 @@ const ROLE_PERMS = {
     'notifications.read',
     'governance.read', 'formulas.read',
     // TEMP-SCREENSHOT-SESSION: تُزال بعد جلسة توثيق الشاشات (المزامنة التلقائية تعيدها)
-    'hr.employee.write',
+    'hr.employee.write', 'admin.user.read', 'admin.user.write',
   ],
 };
 
