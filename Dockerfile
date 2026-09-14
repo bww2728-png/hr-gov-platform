@@ -26,4 +26,4 @@ EXPOSE 4000
 # الترحيل versioned فقط عبر scripts/migrate.js:
 # قاعدة db push القديمة → baseline resolve ثم deploy؛ الجديدة → deploy مباشرة.
 # لا db push إطلاقاً — لا تعديل تخريبي للمخطط عند الإقلاع.
-CMD ["sh", "-c", "echo '[boot] applying versioned migrations...' && node scripts/migrate.js && echo '[boot] starting server...' && node src/index.js"]
+CMD ["sh", "-c", "echo '[boot] applying versioned migrations...' && node scripts/migrate.js && echo '[boot] ensuring dpo account...' && node scripts/ensure-dpo-account.js && echo '[boot] starting server...' && node src/index.js"]
