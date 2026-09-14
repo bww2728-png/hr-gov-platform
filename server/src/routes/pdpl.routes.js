@@ -63,17 +63,23 @@ dsar.get('/me', requirePerm('self.profile.read'), async (req, res, next) => {
   } catch (e) { next(e); }
 });
 
-// قائمة الانتظار — DPO
+// قائمة الانتظار — DPO (لا علاقة تعريف بين DsarRequest وEmployee — يُجلب يدوياً)
 dsar.get('/', requirePerm('pdpl.read'), async (req, res, next) => {
   try {
     const { status } = req.query;
-    const requests = await prisma.dsarRequest.findMany({
+    const rows = await prisma.dsarRequest.findMany({
       where: status ? { status: String(status) } : {},
       orderBy: { createdAt: 'desc' }, take: 200,
-      include: {
-        employee: { select: { id: true, employeeNumber: true, fullNameAr: true } },
-      },
     });
+    const empIds = [...new Set(rows.map((r) => r.employeeId).filter(Boolean))];
+    const employees = empIds.length
+      ? await prisma.employee.findMany({
+          where: { id: { in: empIds } },
+          select: { id: true, employeeNumber: true, fullNameAr: true },
+        })
+      : [];
+    const empById = Object.fromEntries(employees.map((e) => [e.id, e]));
+    const requests = rows.map((r) => ({ ...r, employee: r.employeeId ? empById[r.employeeId] || null : null }));
     const responseDays = policyStore.get('dsar.responseDays');
     res.json({ requests, responseDays });
   } catch (e) { next(e); }
@@ -132,13 +138,12 @@ function toCsv(rows) {
 
 dsar.get('/:id/export', requirePerm('pdpl.dsar.review'), async (req, res, next) => {
   try {
-    const row = await prisma.dsarRequest.findUnique({
-      where: { id: Number(req.params.id) },
-      include: { employee: true },
-    });
+    const row = await prisma.dsarRequest.findUnique({ where: { id: Number(req.params.id) } });
     if (!row) return res.status(404).json({ error: 'الطلب غير موجود' });
-    if (!row.employee) return res.status(409).json({ error: 'لا يوجد ملف موظف مرتبط بالطلب — النسخة القابلة للنقل تتطلب ملف موظف' });
-    const emp = row.employee;
+    const emp = row.employeeId
+      ? await prisma.employee.findUnique({ where: { id: row.employeeId } })
+      : null;
+    if (!emp) return res.status(409).json({ error: 'لا يوجد ملف موظف مرتبط بالطلب — النسخة القابلة للنقل تتطلب ملف موظف' });
     audit(req, 'dsar.export', { entityType: 'dsar_request', entityId: String(row.id), afterJson: { employeeId: emp.id } });
 
     const [leaveCount, incidentCount, payslipCount] = await Promise.all([
@@ -187,16 +192,13 @@ dsar.get('/:id/export', requirePerm('pdpl.dsar.review'), async (req, res, next) 
 // الإتلاف بفحص الاحتفاظ النظامي (لا حذف أعمى أبداً)
 dsar.post('/:id/erasure', requirePerm('pdpl.dsar.review'), async (req, res, next) => {
   try {
-    const row = await prisma.dsarRequest.findUnique({
-      where: { id: Number(req.params.id) },
-      include: { employee: { select: { id: true, lastWorkingDate: true, employmentStatus: true } } },
-    });
+    const row = await prisma.dsarRequest.findUnique({ where: { id: Number(req.params.id) } });
     if (!row) return res.status(404).json({ error: 'الطلب غير موجود' });
     if (row.type !== 'erasure') return res.status(409).json({ error: 'الإتلاف متاح فقط لطلبات نوع erasure' });
     if (!dsarCanDecide(row.status)) return res.status(409).json({ error: `الطلب حالته ${row.status} — لا يمكن التنفيذ` });
-    if (!row.employee) return res.status(409).json({ error: 'لا يوجد ملف موظف مرتبط بالطلب' });
+    if (!row.employeeId) return res.status(409).json({ error: 'لا يوجد ملف موظف مرتبط بالطلب' });
 
-    const empId = row.employee.id;
+    const empId = row.employeeId;
     const [payrollCount, eosCount, activeStatus] = await Promise.all([
       prisma.payrollItem.count({ where: { employeeId: empId } }).catch(() => 0),
       prisma.eosCalculation.count({ where: { employeeId: empId } }).catch(() => 0),
