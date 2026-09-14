@@ -331,6 +331,8 @@ const ROLE_PERMS = {
     'pdpl.ropa.write', 'pdpl.breach.write',
     // يراجع أثر المعالجة في سجل التدقيق ويقرأ بيانات الموظف لتنفيذ الطلبات
     'admin.audit.read', 'hr.employee.read',
+    // يرى إشعارات دوره (حوادث التسرب وغيرها) دون صلاحيات WPS
+    'notifications.read',
     'governance.read', 'formulas.read',
   ],
 };

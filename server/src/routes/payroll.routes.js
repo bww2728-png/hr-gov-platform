@@ -523,7 +523,7 @@ router.get('/wps/dashboard', requirePerm('wps.read'), async (req, res, next) => 
 });
 
 /** تنبيهات WPS المحفوظة (تستخدمها اللوحة وواجهة التنبيهات) */
-router.get('/wps/notifications', requirePerm('wps.read'), async (req, res, next) => {
+router.get('/wps/notifications', requirePerm('wps.read', 'notifications.read'), async (req, res, next) => {
   try {
     const roleKey = req.user.role?.key || req.user.role?.name || null;
     const notifications = await prisma.systemNotification.findMany({
