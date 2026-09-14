@@ -1,5 +1,5 @@
 /**
- * Permission catalog - 14 roles, ~215 permissions.
+ * Permission catalog - 15 roles, ~220 permissions.
  * Based on spec: انواع المستخدمين وصلاحياتهم + مصفوفة الحوكمة (الوثائق الثلاث).
  */
 
@@ -18,6 +18,7 @@ const ROLES = [
   { code: 'security_admin',     nameAr: 'مسؤول الأمن السيبراني', nameEn: 'Security Admin' },
   { code: 'knowledge_keeper',   nameAr: 'أمين المعرفة',          nameEn: 'Knowledge Keeper' },
   { code: 'compliance_officer', nameAr: 'مسؤول امتثال',          nameEn: 'Compliance Officer' },
+  { code: 'dpo',                nameAr: 'مسؤول حماية البيانات',  nameEn: 'Data Protection Officer' },
 ];
 
 /**
@@ -318,6 +319,20 @@ const ROLE_PERMS = {
     'governance.read', 'governance.approve',
     'formulas.read', 'qiwa.read',
   ],
+
+  // ============ 14. مسؤول حماية البيانات (PDPL — منفصل عن IT/HR) ============
+  dpo: [
+    'self.profile.read', 'self.profile.write',
+    'requests.create', 'requests.read.self',
+    'knowledge.doc.read', 'knowledge.policy.read',
+    // محرك PDPL الكامل: DSAR + RoPA + حوادث التسرب
+    'pdpl.read', 'pdpl.write',
+    'pdpl.dsar.review', 'pdpl.dsar.extend',
+    'pdpl.ropa.write', 'pdpl.breach.write',
+    // يراجع أثر المعالجة في سجل التدقيق ويقرأ بيانات الموظف لتنفيذ الطلبات
+    'admin.audit.read', 'hr.employee.read',
+    'governance.read', 'formulas.read',
+  ],
 };
 
 // دور محلل البيانات أُدمج في المراقب الداخلي (auditor) — يُبقى كاسم بديل للتوافق مع الحسابات القديمة حتى إعادة تعيينها
@@ -450,7 +465,14 @@ const PERMISSIONS = {
     },
   },
   nitaqat: { nameAr: 'نطاقات', nameEn: 'Nitaqat', actions: { 'read': 'قراءة', 'write': 'تسجيل اللقطات' } },
-  pdpl: { nameAr: 'حماية البيانات', nameEn: 'PDPL', actions: { 'read': 'قراءة', 'write': 'إدارة الامتثال' } },
+  pdpl: {
+    nameAr: 'حماية البيانات', nameEn: 'PDPL',
+    actions: {
+      'read': 'قراءة لوحات حماية البيانات', 'write': 'إدارة الامتثال',
+      'dsar.review': 'مراجعة وتنفيذ طلبات أصحاب البيانات', 'dsar.extend': 'تمديد مهلة الاستجابة بإشعار مسبب',
+      'ropa.write': 'إدارة سجل أنشطة المعالجة (م33)', 'breach.write': 'إدارة حوادث التسرب والإبلاغ لسدايا',
+    },
+  },
   regulatory: { nameAr: 'التقارير التنظيمية', nameEn: 'Regulatory Reports', actions: { 'read': 'قراءة', 'write': 'إعداد وتقديم' } },
   knowledge: {
     nameAr: 'إدارة المعرفة', nameEn: 'Knowledge',

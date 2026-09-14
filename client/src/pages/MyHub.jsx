@@ -7,7 +7,13 @@ import { fmtDate } from '../utils/datetime';
 const STATUS_AR = {
   pending: 'بانتظار المدير', manager_approved: 'بانتظار HR', approved: 'معتمدة', rejected: 'مرفوضة',
   cancelled: 'ملغاة', submitted: 'مقدم', in_approval: 'قيد الاعتماد', done: 'منفذ', active: 'نشط',
-  enrolled: 'مسجل', completed: 'مكتمل', present: 'حاضر', absent: 'غائب',
+  enrolled: 'مسجل', completed: 'منفذ', present: 'حاضر', absent: 'غائب',
+  in_progress: 'قيد المعالجة', extended: 'مُمدد',
+};
+
+const DSAR_TYPES_AR = {
+  access: 'وصول إلى بياناتي', portable_copy: 'نسخة قابلة للنقل',
+  rectification: 'تصحيح بياناتي', erasure: 'إتلاف بياناتي',
 };
 
 export default function MyHub() {
@@ -23,6 +29,8 @@ export default function MyHub() {
   const [reqTypes, setReqTypes] = useState([]);
   const [leaveForm, setLeaveForm] = useState({ leaveTypeId: '', startDate: '', endDate: '', reason: '' });
   const [reqForm, setReqForm] = useState({ typeId: '', details: '' });
+  const [dsarMine, setDsarMine] = useState([]);
+  const [dsarForm, setDsarForm] = useState({ type: 'access', details: '' });
   const [workWindow, setWorkWindow] = useState(null);
   const [nowTick, setNowTick] = useState(Date.now());
 
@@ -46,6 +54,7 @@ export default function MyHub() {
     client.get('/attendance/records', { params: { from: today, to: today } })
       .then(({ data }) => setTodayRecord(data.records[0] || null)).catch(() => {});
     client.get('/attendance/work-window').then(({ data }) => setWorkWindow(data)).catch(() => {});
+    client.get('/dsar/me').then(({ data }) => setDsarMine(data.requests || [])).catch(() => {});
   }
   useEffect(load, []);
 
@@ -81,6 +90,16 @@ export default function MyHub() {
     e.preventDefault();
     client.post('/requests', { typeId: Number(reqForm.typeId), payload: { details: reqForm.details } })
       .then(() => { toast.success('تم تقديم الطلب'); setReqForm({ typeId: '', details: '' }); load(); })
+      .catch((err) => toast.error(err.response?.data?.error || 'فشل'));
+  }
+  function submitDsar(e) {
+    e.preventDefault();
+    client.post('/dsar', { type: dsarForm.type, details: dsarForm.details || undefined })
+      .then(({ data }) => {
+        toast.success(`تم تقديم طلب حماية البيانات — موعد الرد خلال ${data.responseDays} يوماً`);
+        setDsarForm({ type: 'access', details: '' });
+        load();
+      })
       .catch((err) => toast.error(err.response?.data?.error || 'فشل'));
   }
 
@@ -210,6 +229,41 @@ export default function MyHub() {
             <textarea value={reqForm.details} onChange={(e) => setReqForm({ ...reqForm, details: e.target.value })} required placeholder="التفاصيل" className="input w-full" rows={3} />
             <button className="btn-primary w-full">إرسال</button>
           </form>
+        </div>
+      </div>
+
+      {/* حماية البيانات الشخصية (PDPL — م12) */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div className="card-padded">
+          <h2 className="h3 mb-1">حماية بياناتي الشخصية</h2>
+          <p className="text-xs text-ink-500 mb-3">حقك وفق نظام حماية البيانات الشخصية — الرد خلال 30 يوماً (تمديد 30 بإشعار مسبب)</p>
+          <form onSubmit={submitDsar} className="space-y-2">
+            <select value={dsarForm.type} onChange={(e) => setDsarForm({ ...dsarForm, type: e.target.value })} className="input w-full">
+              {Object.entries(DSAR_TYPES_AR).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+            <textarea value={dsarForm.details} onChange={(e) => setDsarForm({ ...dsarForm, details: e.target.value })} placeholder="تفاصيل الطلب (اختياري)" className="input w-full" rows={2} />
+            <button className="btn-primary w-full">تقديم الطلب لمسؤول حماية البيانات</button>
+          </form>
+        </div>
+
+        <div className="card-padded">
+          <h2 className="h3 mb-3">طلبات حماية بياناتي</h2>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>النوع</th><th>الحالة</th><th>موعد الرد</th><th>النتيجة</th></tr></thead>
+              <tbody>
+                {dsarMine.map((r) => (
+                  <tr key={r.id}>
+                    <td>{DSAR_TYPES_AR[r.type] || r.type}</td>
+                    <td><span className={r.status === 'completed' ? 'badge-success' : r.status === 'rejected' ? 'badge-danger' : 'badge-warn'}>{STATUS_AR[r.status] || r.status}</span></td>
+                    <td>{fmtDate(r.extendedDueDate || r.dueDate)}</td>
+                    <td className="text-xs text-ink-500 max-w-[200px] truncate">{r.resolution || '—'}</td>
+                  </tr>
+                ))}
+                {!dsarMine.length && <tr><td colSpan={4} className="text-center text-ink-400">لا توجد طلبات</td></tr>}
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
 

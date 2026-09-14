@@ -17,6 +17,7 @@ import KnowledgeHub from './pages/KnowledgeHub';
 import PolicyRulesHub from './pages/PolicyRulesHub';
 import Workflows from './pages/Workflows';
 import ComplianceHub from './pages/ComplianceHub';
+import PdplHub from './pages/PdplHub';
 import TransformationHub from './pages/TransformationHub';
 import Analytics from './pages/Analytics';
 import Users from './pages/Users';
@@ -91,6 +92,7 @@ function AppRoutes() {
                 <Route path="/policy-center" element={<PolicyRulesHub />} />
                 <Route path="/formulas" element={<Navigate to="/policy-center" replace />} />
                 <Route path="/compliance" element={<ComplianceHub />} />
+                <Route path="/pdpl" element={<PdplHub />} />
                 <Route path="/compliance-sa" element={<Navigate to="/compliance" replace />} />
                 <Route path="/maturity" element={<TransformationHub />} />
                 <Route path="/roadmap" element={<Navigate to="/maturity" replace />} />

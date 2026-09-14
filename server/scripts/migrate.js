@@ -85,5 +85,27 @@ function run(cmd, { allowFail = false } = {}) {
   }
 
   run('npx prisma migrate deploy');
+
+  // ضمان وجود دور DPO في كل البيئات — بيانات نظامية بلا أسرار، idempotent بشرط NOT EXISTS
+  // + مزامنة صلاحياته مع مصفوفة permissions.js عند أي تغيير مستقبلي.
+  try {
+    const { ROLE_PERMS } = require('../src/permissions');
+    const perms = sqlLiteral(JSON.stringify(ROLE_PERMS.dpo || []));
+    dbExec(
+      `INSERT INTO "roles" ("code", "name_ar", "name_en", "description", "is_system", "permissions", "created_at", "updated_at")
+       SELECT 'dpo', 'مسؤول حماية البيانات', 'Data Protection Officer', 'Data Protection Officer', true, ${perms}::jsonb, now(), now()
+       WHERE NOT EXISTS (SELECT 1 FROM "roles" WHERE "code" = 'dpo');`,
+      { label: 'ensure-dpo-role' }
+    );
+    dbExec(
+      `UPDATE "roles" SET "permissions" = ${perms}::jsonb, "updated_at" = now()
+       WHERE "code" = 'dpo' AND "permissions" IS DISTINCT FROM ${perms}::jsonb;`,
+      { label: 'sync-dpo-perms' }
+    );
+    console.log('[migrate] dpo role ensured');
+  } catch (e) {
+    console.log('[migrate] (dpo-ensure non-fatal):', e.message);
+  }
+
   console.log('[migrate] done');
 })().catch((e) => { console.error('[migrate] FAILED:', e.message); process.exit(1); });

@@ -35,6 +35,7 @@ const formulasRoutes = require('./routes/formulas.routes');
 const policiesRoutes = require('./routes/policies.routes');
 const reportsRoutes = require('./routes/reports.routes');
 const qiwaRoutes = require('./routes/qiwa.routes');
+const pdplRoutes = require('./routes/pdpl.routes');
 
 function createApp() {
   const app = express();
@@ -153,6 +154,9 @@ function createApp() {
   app.use('/api/policies', policiesRoutes);
   app.use('/api/reports', reportsRoutes);
   app.use('/api/qiwa', qiwaRoutes);
+  app.use('/api/dsar', pdplRoutes.dsar);
+  app.use('/api/ropa', pdplRoutes.ropa);
+  app.use('/api/breaches', pdplRoutes.breaches);
 
   const clientDist = path.join(__dirname, '..', '..', 'client', 'dist');
   app.use(express.static(clientDist));

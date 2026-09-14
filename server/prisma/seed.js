@@ -84,9 +84,9 @@ async function main() {
   console.log('[seed] wipe done');
 
   // ============================================================
-  // ROLES — 13 role من src/permissions.js
+  // ROLES — 15 role من src/permissions.js
   // ============================================================
-  console.log('[seed] roles (13)…');
+  console.log('[seed] roles (15)…');
   const roles = {};
   for (const r of ROLE_DEFS) {
     const row = await prisma.role.create({
@@ -299,6 +299,7 @@ async function main() {
     { username: 'security',   role: 'security_admin',    nameAr: 'بدر الشهري',            nameEn: 'Badr Security' },
     { username: 'analyst',    role: 'data_analyst',      nameAr: 'جواهر العنزي',          nameEn: 'Jawaher Analyst' },
     { username: 'compliance', role: 'compliance_officer',nameAr: 'هند القرني',            nameEn: 'Hind Compliance' },
+    { username: 'dpo',        role: 'dpo',               nameAr: 'لمى العتيبي',           nameEn: 'Lama Data Protection Officer' },
   ];
 
   const users = {};

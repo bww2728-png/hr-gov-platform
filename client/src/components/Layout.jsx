@@ -51,6 +51,7 @@ const NAV_SECTIONS = [
       { to: '/knowledge', label: 'مركز المعرفة', perm: 'knowledge.doc.read' },
       { to: '/policy-center', label: 'مركز المعايير والقواعد', perm: 'policies.read' },
       { to: '/compliance', label: 'الامتثال', perm: 'compliance.rule.read' },
+      { to: '/pdpl', label: 'حماية البيانات', perm: 'pdpl.read' },
       { to: '/maturity', label: 'مركز التحول', perm: 'maturity.read' },
       { to: '/workflows', label: 'سير العمل', perm: 'workflow.instance.read' },
       { to: '/transparency', label: 'الشفافية', perm: 'self.profile.read' },
