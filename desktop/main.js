@@ -2,7 +2,7 @@
  * منصة الناضج — تطبيق سطح المكتب
  * غلاف آمن يحمّل النظام الحي من Railway مع مزايا سطح مكتب كاملة.
  */
-const { app, BrowserWindow, Tray, Menu, Notification, shell, nativeImage, ipcMain } = require('electron');
+const { app, BrowserWindow, Tray, Menu, Notification, shell, nativeImage, ipcMain, dialog } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -117,6 +117,17 @@ function buildTray() {
   tray.setToolTip(APP_NAME);
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: 'فتح ' + APP_NAME, click: () => { if (mainWindow) { mainWindow.show(); mainWindow.focus(); } else createWindow(); } },
+    { type: 'separator' },
+    { label: 'حول التطبيق', click: () => {
+      dialog.showMessageBox({
+        type: 'info',
+        title: 'حول التطبيق',
+        message: APP_NAME + ' — إصدار سطح المكتب ' + app.getVersion(),
+        detail: 'إصدار سطح المكتب: ' + app.getVersion() + '\nإصدار المنظومة: يُقرأ لحظياً من النظام الحي.\nالنظام الحي: ' + APP_URL + '\nمحتوى التطبيق يتحدث تلقائياً مع كل نشر للمنظومة — لا حاجة لإعادة تثبيت.',
+        buttons: ['حسناً'],
+        icon: iconPath() ? nativeImage.createFromPath(iconPath()) : undefined,
+      });
+    } },
     { type: 'separator' },
     { label: 'بدء تلقائي مع تشغيل ويندوز', type: 'checkbox', checked: autoLaunchActive(), click: (item) => {
       app.setLoginItemSettings({ openAtLogin: item.checked });
